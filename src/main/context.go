@@ -191,3 +191,42 @@ func (this *Context) BuildReverseFor(instanceIds[] string) (string, *ReverseCont
 
 	return errstr, rctx
 }
+
+
+
+// The representation of an EC2 fleet inside ec2tools.
+// The properties shared by all instances of a single fleet are listed in this
+// structure too.
+//
+type Ec2Fleet struct {
+	Name   string                        // name of the fleet given by user
+	User   string              // name to use to ssh instances of the fleet
+	Region string                         // ec2 region code for this fleet
+	Instances []*Ec2Instance                     // instances of this fleet
+}
+
+// The representation of an EC2 instance inside ec2tools.
+// Has a back pointer to its parent fleet.
+//
+type Ec2Instance struct {
+	Name        string                           // ec2 id of this instance
+	PublicIp    string       // public IPv4 address (seen from outside ec2)
+	PrivateIp   string     // private IPv4 address (seen from the instance)
+	Fleet       *Ec2Fleet                    // pointer to the parent fleet
+	FleetIndex  int         // index of the instance inside Fleet.Instances
+	UniqueIndex int       // unique index of this instance among all fleets
+}
+
+// The entry access point for every fleets / instances managed by ec2tools.
+//
+type Ec2Index struct {
+	FleetsByName map[string]*Ec2Fleet        // every fleets listed by Name
+	InstancesByName map[string]*Ec2Instance      // every instances by Name
+}
+
+// The encapsulation for a set of instances.
+// This is more convenient to carry across function calls than a plain slice.
+//
+type Ec2Selection struct {
+	Instances []*Ec2Instances
+}
