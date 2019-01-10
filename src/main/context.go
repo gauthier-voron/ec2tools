@@ -277,6 +277,7 @@ func (this *Ec2Index) AddEc2Fleet(id, name, user, region string) (*Ec2Fleet, err
 		return nil, &err
 	}
 
+	fleet.Id = id
 	fleet.Name = name
 	fleet.User = user
 	fleet.Region = region
@@ -372,6 +373,7 @@ type ec2index struct {
 // See type ec2index for more information.
 //
 type ec2fleet struct {
+	Id        string         // storage for Ec2Fleet.Id
 	Name      string         // storage for Ec2Fleet.Name
 	User      string         // storage for Ec2Fleet.User
 	Region    string         // storage for Ec2Fleet.Region
@@ -428,6 +430,7 @@ func packEc2Fleet(fleet *Ec2Fleet) *ec2fleet {
 	var pfleet ec2fleet
 	var instance *Ec2Instance
 
+	pfleet.Id = fleet.Id
 	pfleet.Name = fleet.Name
 	pfleet.User = fleet.User
 	pfleet.Region = fleet.Region
@@ -496,6 +499,7 @@ func unpackEc2Fleet(idx *Ec2Index, pfleet *ec2fleet) *Ec2Fleet {
 	var pinstance *ec2instance
 	var index int
 
+	fleet.Id = pfleet.Id
 	fleet.Name = pfleet.Name
 	fleet.User = pfleet.User
 	fleet.Region = pfleet.Region
