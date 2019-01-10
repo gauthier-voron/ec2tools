@@ -23,10 +23,12 @@ func TestAddEc2Fleet(t *testing.T) {
 	var fleet *Ec2Fleet
 	var err error
 
-	fleet, err = idx.AddEc2Fleet("name", "user", "region")
+	fleet, err = idx.AddEc2Fleet("a", "name", "user", "region")
 
 	if err != nil {
 		t.FailNow()
+	} else if fleet.Id != "a" {
+		t.Fail()
 	} else if fleet.Name != "name" {
 		t.Fail()
 	} else if fleet.User != "user" {
@@ -47,12 +49,14 @@ func TestAddEc2FleetAlreadyUsed(t *testing.T) {
 	var fleet0, fleet1 *Ec2Fleet
 	var err error
 
-	fleet0, _ = idx.AddEc2Fleet("name", "user0", "region0")
-	fleet1, err = idx.AddEc2Fleet("name", "user1", "region1")
+	fleet0, _ = idx.AddEc2Fleet("a", "name", "user0", "region0")
+	fleet1, err = idx.AddEc2Fleet("b", "name", "user1", "region1")
 
 	if err == nil {
 		t.Fail()
 	} else if fleet1 != nil {
+		t.Fail()
+	} else if fleet0.Id != "a" {
 		t.Fail()
 	} else if fleet0.Name != "name" {
 		t.Fail()
@@ -65,18 +69,18 @@ func TestAddEc2FleetAlreadyUsed(t *testing.T) {
 
 func TestStoreEc2Index(t *testing.T) {
 	var path string = "context_test_TestStoreEc2Index.json"
-	var expectedJson string = "{\"Fleets\":[{\"Name\":\"fleet0\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i0\",\"PublicIp\":\"0.0.0.0\",\"PrivateIp\":\"1.0.0.0\",\"UniqueIndex\":0,\"Attributes\":{}},{\"Name\":\"i1\",\"PublicIp\":\"0.0.0.1\",\"PrivateIp\":\"1.0.0.1\",\"UniqueIndex\":1,\"Attributes\":{}}]},{\"Name\":\"fleet1\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i2\",\"PublicIp\":\"0.0.0.2\",\"PrivateIp\":\"1.0.0.2\",\"UniqueIndex\":2,\"Attributes\":{}}]}],\"UniqueCounter\":3}"
+	var expectedJson string = "{\"Fleets\":[{\"Id\":\"0\",\"Name\":\"fleet0\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i0\",\"PublicIp\":\"0.0.0.0\",\"PrivateIp\":\"1.0.0.0\",\"UniqueIndex\":0,\"Attributes\":{}},{\"Name\":\"i1\",\"PublicIp\":\"0.0.0.1\",\"PrivateIp\":\"1.0.0.1\",\"UniqueIndex\":1,\"Attributes\":{}}]},{\"Id\":\"1\",\"Name\":\"fleet1\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i2\",\"PublicIp\":\"0.0.0.2\",\"PrivateIp\":\"1.0.0.2\",\"UniqueIndex\":2,\"Attributes\":{}}]}],\"UniqueCounter\":3}"
 	var idx *Ec2Index = NewEc2Index()
 	var fleet0, fleet1 *Ec2Fleet
 	var jsonString string
 	var raw []byte
 	var err error
 
-	fleet0, _ = idx.AddEc2Fleet("fleet0", "u", "r")
+	fleet0, _ = idx.AddEc2Fleet("0", "fleet0", "u", "r")
 	fleet0.AddEc2Instance("i0", "0.0.0.0", "1.0.0.0")
 	fleet0.AddEc2Instance("i1", "0.0.0.1", "1.0.0.1")
 
-	fleet1, _ = idx.AddEc2Fleet("fleet1", "u", "r")
+	fleet1, _ = idx.AddEc2Fleet("1", "fleet1", "u", "r")
 	fleet1.AddEc2Instance("i2", "0.0.0.2", "1.0.0.2")
 
 	err = StoreEc2Index(path, idx)
@@ -101,7 +105,7 @@ func TestStoreEc2Index(t *testing.T) {
 
 func TestLoadEc2Index(t *testing.T) {
 	var path string = "context_test_TestLoadEc2Index.json"
-	var loadedJson string = "{\"Fleets\":[{\"Name\":\"fleet0\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i0\",\"PublicIp\":\"0.0.0.0\",\"PrivateIp\":\"1.0.0.0\",\"UniqueIndex\":0,\"Attributes\":{}},{\"Name\":\"i1\",\"PublicIp\":\"0.0.0.1\",\"PrivateIp\":\"1.0.0.1\",\"UniqueIndex\":1,\"Attributes\":{}}]},{\"Name\":\"fleet1\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i2\",\"PublicIp\":\"0.0.0.2\",\"PrivateIp\":\"1.0.0.2\",\"UniqueIndex\":2,\"Attributes\":{}}]}],\"UniqueCounter\":3}"
+	var loadedJson string = "{\"Fleets\":[{\"Id\":\"0\",\"Name\":\"fleet0\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i0\",\"PublicIp\":\"0.0.0.0\",\"PrivateIp\":\"1.0.0.0\",\"UniqueIndex\":0,\"Attributes\":{}},{\"Name\":\"i1\",\"PublicIp\":\"0.0.0.1\",\"PrivateIp\":\"1.0.0.1\",\"UniqueIndex\":1,\"Attributes\":{}}]},{\"Id\":\"1\",\"Name\":\"fleet1\",\"User\":\"u\",\"Region\":\"r\",\"Instances\":[{\"Name\":\"i2\",\"PublicIp\":\"0.0.0.2\",\"PrivateIp\":\"1.0.0.2\",\"UniqueIndex\":2,\"Attributes\":{}}]}],\"UniqueCounter\":3}"
 	var idx *Ec2Index
 	var fleet *Ec2Fleet
 	var found bool
@@ -132,7 +136,9 @@ func TestLoadEc2Index(t *testing.T) {
 		t.FailNow()
 	}
 
-	if fleet.Name != "fleet0" {
+	if fleet.Id != "0" {
+		t.Fail()
+	} else if fleet.Name != "fleet0" {
 		t.Fail()
 	} else if fleet.User != "u" {
 		t.Fail()
@@ -173,7 +179,9 @@ func TestLoadEc2Index(t *testing.T) {
 		t.FailNow()
 	}
 
-	if fleet.Name != "fleet1" {
+	if fleet.Id != "1" {
+		t.Fail()
+	} else if fleet.Name != "fleet1" {
 		t.Fail()
 	} else if fleet.User != "u" {
 		t.Fail()
@@ -204,11 +212,11 @@ func TestFilterInstanceEc2Selection(t *testing.T) {
 	var sel *Ec2Selection
 	var err error
 
-	fleet0, _ = idx.AddEc2Fleet("fleet0", "u", "r")
+	fleet0, _ = idx.AddEc2Fleet("0", "fleet0", "u", "r")
 	fleet0.AddEc2Instance("i0", "0.0.0.0", "1.0.0.0")
 	fleet0.AddEc2Instance("i1", "0.0.0.1", "1.0.0.1")
 
-	fleet1, _ = idx.AddEc2Fleet("fleet1", "u", "r")
+	fleet1, _ = idx.AddEc2Fleet("1", "fleet1", "u", "r")
 	fleet1.AddEc2Instance("i2", "0.0.0.2", "1.0.0.2")
 
 	sel, err = idx.Select([]string{"i2", "i0"})
@@ -234,7 +242,7 @@ func TestFilterDuplicateInstanceEc2Selection(t *testing.T) {
 	var sel *Ec2Selection
 	var err error
 
-	fleet, _ = idx.AddEc2Fleet("fleet0", "u", "r")
+	fleet, _ = idx.AddEc2Fleet("0", "fleet0", "u", "r")
 	fleet.AddEc2Instance("i0", "0.0.0.0", "1.0.0.0")
 
 	sel, err = idx.Select([]string{"i0", "i0"})
@@ -260,11 +268,11 @@ func TestFilterFleetEc2Selection(t *testing.T) {
 	var sel *Ec2Selection
 	var err error
 
-	fleet0, _ = idx.AddEc2Fleet("fleet0", "u", "r")
+	fleet0, _ = idx.AddEc2Fleet("0", "fleet0", "u", "r")
 	fleet0.AddEc2Instance("i0", "0.0.0.0", "1.0.0.0")
 	fleet0.AddEc2Instance("i1", "0.0.0.1", "1.0.0.1")
 
-	fleet1, _ = idx.AddEc2Fleet("fleet1", "u", "r")
+	fleet1, _ = idx.AddEc2Fleet("1", "fleet1", "u", "r")
 	fleet1.AddEc2Instance("i2", "0.0.0.2", "1.0.0.2")
 
 	sel, err = idx.Select([]string{"@fleet0"})
@@ -290,11 +298,11 @@ func TestMatchFleetEc2Selection(t *testing.T) {
 	var sel *Ec2Selection
 	var err error
 
-	fleet0, _ = idx.AddEc2Fleet("fleet0", "u", "r")
+	fleet0, _ = idx.AddEc2Fleet("0", "fleet0", "u", "r")
 	fleet0.AddEc2Instance("i0", "0.0.0.0", "1.0.0.0")
 	fleet0.AddEc2Instance("i1", "0.0.0.1", "1.0.0.1")
 
-	fleet1, _ = idx.AddEc2Fleet("fleet1", "u", "r")
+	fleet1, _ = idx.AddEc2Fleet("1", "fleet1", "u", "r")
 	fleet1.AddEc2Instance("i2", "0.0.0.2", "1.0.0.2")
 
 	sel, err = idx.Select([]string{"@/^fle.*$/"})
@@ -322,8 +330,8 @@ func TestMatchFleetOrderingEc2Selection(t *testing.T) {
 	var sel *Ec2Selection
 	var err error
 
-	fleet0, _ = idx.AddEc2Fleet("fleet0", "u", "r")
-	fleet1, _ = idx.AddEc2Fleet("fleet1", "u", "r")
+	fleet0, _ = idx.AddEc2Fleet("0", "fleet0", "u", "r")
+	fleet1, _ = idx.AddEc2Fleet("1", "fleet1", "u", "r")
 
 	fleet0.AddEc2Instance("i0", "0.0.0.0", "1.0.0.0")
 	fleet1.AddEc2Instance("i2", "0.0.0.2", "1.0.0.2")

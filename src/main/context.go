@@ -227,6 +227,7 @@ type Ec2Index struct {
 // structure too.
 //
 type Ec2Fleet struct {
+	Id        string         // ec2 id code for fleet request
 	Name      string         // name of the fleet given by user
 	User      string         // name to use to ssh instances of the fleet
 	Region    string         // ec2 region code for this fleet
@@ -265,7 +266,7 @@ func NewEc2Index() *Ec2Index {
 // code.
 // Return an error if the fleet name is already used.
 //
-func (this *Ec2Index) AddEc2Fleet(name, user, region string) (*Ec2Fleet, error) {
+func (this *Ec2Index) AddEc2Fleet(id, name, user, region string) (*Ec2Fleet, error) {
 	var fleetNameDup bool
 	var err Ec2IndexError
 	var fleet Ec2Fleet
