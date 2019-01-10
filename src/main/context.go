@@ -352,6 +352,223 @@ func (this *Ec2Fleet) AddEc2Instance(name, publicIp, privateIp string) (*Ec2Inst
 	return &instance, nil
 }
 
+// ----------------------------------------------------------------------------
+// Load and store related code.
+// ----------------------------------------------------------------------------
+
+// Storage type for Ec2Index.
+// Contains the same information but with no redundancy or pointers, more
+// suitable for marshaling.
+//
+type ec2index struct {
+	Fleets []*ec2fleet // storage for Ec2Index.FleetsByName
+	// InstancesByName: computable from ec2index.fleets
+	UniqueCounter int // storage for Ec2Index.uniqueCounter
+}
+
+// Storage type for Ec2Fleet.
+// See type ec2index for more information.
+//
+type ec2fleet struct {
+	Name      string         // storage for Ec2Fleet.Name
+	User      string         // storage for Ec2Fleet.User
+	Region    string         // storage for Ec2Fleet.Region
+	Instances []*ec2instance // storage for Ec2Fleet.Instances
+}
+
+// Storage type for Ec2Instance.
+// See type ec2index for more information.
+//
+type ec2instance struct {
+	Name      string // storage for Ec2Instance.Name
+	PublicIp  string // storage for Ec2Instance.PublicIp
+	PrivateIp string // storage for Ec2Instance.PrivateIp
+	// Fleet: no backpointer
+	// FleetIndex: computable from ec2fleet.instances
+	UniqueIndex int // storage for Ec2Instance.UniqueIndex
+	Attributes  map[string]string
+}
+
+// Convert an Ec2Index to an ec2index.
+// Transform a data structure suitable for in-memory navigation to a data
+// structure efficient for storage.
+//
+func packEc2Index(idx *Ec2Index) *ec2index {
+	var sortedFleetsName []string
+	var pidx ec2index
+	var fleet *Ec2Fleet
+	var name string
+
+	pidx.Fleets = make([]*ec2fleet, 0, len(idx.FleetsByName))
+	pidx.UniqueCounter = idx.uniqueCounter
+
+	sortedFleetsName = make([]string, 0, len(idx.FleetsByName))
+
+	for name = range idx.FleetsByName {
+		sortedFleetsName = append(sortedFleetsName, name)
+	}
+
+	sort.Strings(sortedFleetsName)
+
+	for _, name = range sortedFleetsName {
+		fleet = idx.FleetsByName[name]
+		pidx.Fleets = append(pidx.Fleets, packEc2Fleet(fleet))
+	}
+
+	return &pidx
+}
+
+// Convert an Ec2Fleet to an ec2fleet.
+// Transform a data structure suitable for in-memory navigation to a data
+// structure efficient for storage.
+//
+func packEc2Fleet(fleet *Ec2Fleet) *ec2fleet {
+	var pfleet ec2fleet
+	var instance *Ec2Instance
+
+	pfleet.Name = fleet.Name
+	pfleet.User = fleet.User
+	pfleet.Region = fleet.Region
+	pfleet.Instances = make([]*ec2instance, 0, len(fleet.Instances))
+
+	for _, instance = range fleet.Instances {
+		pfleet.Instances = append(pfleet.Instances,
+			packEc2Instance(instance))
+	}
+
+	return &pfleet
+}
+
+// Convert an Ec2Instance to an ec2instance.
+// Transform a data structure suitable for in-memory navigation to a data
+// structure efficient for storage.
+//
+func packEc2Instance(instance *Ec2Instance) *ec2instance {
+	var pinstance ec2instance
+
+	pinstance.Name = instance.Name
+	pinstance.PublicIp = instance.PublicIp
+	pinstance.PrivateIp = instance.PrivateIp
+	pinstance.UniqueIndex = instance.UniqueIndex
+	pinstance.Attributes = instance.Attributes
+
+	return &pinstance
+}
+
+// Convert an ec2index to an Ec2Index.
+// Transform a data structure efficient for storage to a data structure
+// suitable for in-memory navigation.
+//
+func unpackEc2Index(pidx *ec2index) *Ec2Index {
+	var idx Ec2Index
+	var fleet *Ec2Fleet
+	var instance *Ec2Instance
+	var pfleet *ec2fleet
+
+	idx.FleetsByName = make(map[string]*Ec2Fleet)
+
+	for _, pfleet = range pidx.Fleets {
+		fleet = unpackEc2Fleet(&idx, pfleet)
+		idx.FleetsByName[fleet.Name] = fleet
+	}
+
+	idx.InstancesByName = make(map[string]*Ec2Instance)
+
+	for _, fleet = range idx.FleetsByName {
+		for _, instance = range fleet.Instances {
+			idx.InstancesByName[instance.Name] = instance
+		}
+	}
+
+	idx.uniqueCounter = pidx.UniqueCounter
+
+	return &idx
+}
+
+// Convert an ec2fleet to an Ec2Fleet.
+// Transform a data structure efficient for storage to a data structure
+// suitable for in-memory navigation.
+//
+func unpackEc2Fleet(idx *Ec2Index, pfleet *ec2fleet) *Ec2Fleet {
+	var fleet Ec2Fleet
+	var pinstance *ec2instance
+	var index int
+
+	fleet.Name = pfleet.Name
+	fleet.User = pfleet.User
+	fleet.Region = pfleet.Region
+	fleet.Instances = make([]*Ec2Instance, 0, len(pfleet.Instances))
+	fleet.Index = idx
+
+	for index, pinstance = range pfleet.Instances {
+		fleet.Instances = append(fleet.Instances,
+			unpackEc2Instance(pinstance, &fleet, index))
+	}
+
+	return &fleet
+}
+
+// Convert an ec2instance to an Ec2Instance.
+// Transform a data structure efficient for storage to a data structure
+// suitable for in-memory navigation.
+//
+func unpackEc2Instance(pinstance *ec2instance, fleet *Ec2Fleet, index int) *Ec2Instance {
+	var instance Ec2Instance
+
+	instance.Name = pinstance.Name
+	instance.PublicIp = pinstance.PublicIp
+	instance.PrivateIp = pinstance.PrivateIp
+	instance.Fleet = fleet
+	instance.FleetIndex = index
+	instance.UniqueIndex = pinstance.UniqueIndex
+	instance.Attributes = pinstance.Attributes
+
+	return &instance
+}
+
+// Load an index from a json file.
+// Unmarshal a compact data structure then build an Ec2Index from this compact
+// structure adding fast referencing and backpointers.
+//
+func LoadEc2Index(path string) (*Ec2Index, error) {
+	var pidx ec2index
+	var raw []byte
+	var err error
+
+	raw, err = ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(raw, &pidx)
+	if err != nil {
+		return nil, err
+	}
+
+	return unpackEc2Index(&pidx), nil
+}
+
+// Store an index into a json file.
+// Start by converting the index in a smaller, more compact data structure
+// without pointer loop, then marshal this data structure in json.
+//
+func StoreEc2Index(path string, idx *Ec2Index) error {
+	var raw []byte
+	var err error
+
+	if len(idx.FleetsByName) == 0 {
+		os.Remove(path)
+		return nil
+	}
+
+	raw, err = json.Marshal(packEc2Index(idx))
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(path, raw, 0644)
+}
+
 // The encapsulation for a set of instances.
 // This is more convenient to carry across function calls than a plain slice.
 //
