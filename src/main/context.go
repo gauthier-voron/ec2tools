@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"sort"
 )
 
@@ -569,9 +570,259 @@ func StoreEc2Index(path string, idx *Ec2Index) error {
 	return ioutil.WriteFile(path, raw, 0644)
 }
 
+// ----------------------------------------------------------------------------
+// Selection related code
+// ----------------------------------------------------------------------------
+
 // The encapsulation for a set of instances.
 // This is more convenient to carry across function calls than a plain slice.
 //
 type Ec2Selection struct {
-	Instances []*Ec2Instances
+	Instances []*Ec2Instance
+}
+
+// Apply a regular expression to a slice of string and return a slice
+// containing all the elements matching with the regular expression.
+// If the regular expression cannot compile, return an error.
+//
+func matchSearchSpace(searchSpace []string, goal string) ([]string, error) {
+	var solutionSpace []string = make([]string, 0, len(searchSpace))
+	var searchItem string
+	var r *regexp.Regexp
+	var err error
+
+	r, err = regexp.Compile(goal)
+	if err != nil {
+		return solutionSpace, err
+	}
+
+	for _, searchItem = range searchSpace {
+		if r.MatchString(searchItem) {
+			solutionSpace = append(solutionSpace, searchItem)
+		}
+	}
+
+	return solutionSpace, nil
+}
+
+// Compare the elements of a slice of strings to a goal string and return a
+// slice containing all the elements equals to the goal string.
+//
+func filterSearchSpace(searchSpace []string, goal string) []string {
+	var solutionSpace []string = make([]string, 0, len(searchSpace))
+	var searchItem string
+
+	for _, searchItem = range searchSpace {
+		if searchItem == goal {
+			solutionSpace = append(solutionSpace, searchItem)
+		}
+	}
+
+	return solutionSpace
+}
+
+// Return a selection of instances indicated by a fleet specification.
+// The spec can be either a fleet name or a regex.
+// The matching or filtered fleets get all their instances included in the
+// returned selection with no particular order.
+// If the specification is an ill formed regular expression, return an error.
+//
+func (this *Ec2Index) searchFleetsSpec(regexpOption bool, body string) (*Ec2Selection, error) {
+	var selection Ec2Selection
+	var searchSpace []string = make([]string, 0)
+	var solutionSpace []string
+	var searchItem string
+	var fleet *Ec2Fleet
+	var instance *Ec2Instance
+	var err error
+
+	for searchItem = range this.FleetsByName {
+		searchSpace = append(searchSpace, searchItem)
+	}
+
+	if regexpOption {
+		solutionSpace, err = matchSearchSpace(searchSpace, body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		solutionSpace = filterSearchSpace(searchSpace, body)
+	}
+
+	selection.Instances = make([]*Ec2Instance, 0, len(solutionSpace))
+
+	for _, searchItem = range solutionSpace {
+		fleet = this.FleetsByName[searchItem]
+		for _, instance = range fleet.Instances {
+			selection.Instances =
+				append(selection.Instances, instance)
+		}
+	}
+
+	return &selection, nil
+}
+
+// Return a selection of instances indicated by an instances specification.
+// The spec can be either am instance name or a regex.
+// The matching or filtered instances are included in the returned selection
+// with no particular order.
+// If the specification is an ill formed regular expression, return an error.
+//
+func (this *Ec2Index) searchInstancesSpec(regexpOption bool, body string) (*Ec2Selection, error) {
+	var selection Ec2Selection
+	var searchSpace []string = make([]string, 0)
+	var solutionSpace []string
+	var searchItem string
+	var instance *Ec2Instance
+	var err error
+
+	for searchItem = range this.InstancesByName {
+		searchSpace = append(searchSpace, searchItem)
+	}
+
+	if regexpOption {
+		solutionSpace, err = matchSearchSpace(searchSpace, body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		solutionSpace = filterSearchSpace(searchSpace, body)
+	}
+
+	selection.Instances = make([]*Ec2Instance, 0, len(solutionSpace))
+
+	for _, searchItem = range solutionSpace {
+		instance = this.InstancesByName[searchItem]
+		selection.Instances = append(selection.Instances, instance)
+	}
+
+	return &selection, nil
+}
+
+// Search for every instances matching a given specification which can be
+// either a fleet or an instance specification.
+// This specification can also be either a plain string or a regular
+// expression.
+// Include all the matching instances in the returned selection ordered by
+// their UniqueIndex.
+// If the specification is an ill formed regular expression, return an error.
+//
+func (this *Ec2Index) searchSpec(fleetOption, regexpOption bool, body string) (*Ec2Selection, error) {
+	var selection *Ec2Selection
+	var instance *Ec2Instance
+	var imap map[int]*Ec2Instance
+	var ids []int
+	var err error
+	var id int
+
+	if fleetOption {
+		selection, err = this.searchFleetsSpec(regexpOption, body)
+	} else {
+		selection, err = this.searchInstancesSpec(regexpOption, body)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	imap = make(map[int]*Ec2Instance)
+	ids = make([]int, 0, len(selection.Instances))
+
+	for _, instance = range selection.Instances {
+		imap[instance.UniqueIndex] = instance
+		ids = append(ids, instance.UniqueIndex)
+	}
+
+	sort.Ints(ids)
+	selection.Instances = make([]*Ec2Instance, 0, len(ids))
+
+	for _, id = range ids {
+		selection.Instances = append(selection.Instances, imap[id])
+	}
+
+	return selection, nil
+}
+
+// Parse the given specification and return a selection of the instances in
+// this Ec2Index matching the specification.
+// Sort the selection instances by their UniqueIndex.
+// If the specification is an ill formed regular expression, return an error.
+//
+func (this *Ec2Index) selectSpec(spec string) (*Ec2Selection, error) {
+	var empty Ec2Selection
+	var fleetOption bool = false
+	var regexpOption bool = false
+	var n int = len(spec)
+	var cursor int = 0
+	var body string
+
+	empty.Instances = make([]*Ec2Instance, 0)
+
+	if n <= cursor {
+		return &empty, nil
+	} else if spec[cursor] == '@' {
+		fleetOption = true
+		cursor += 1
+	}
+
+	if n <= cursor {
+		return &empty, nil
+	} else if spec[cursor] == '/' {
+		if (n > (cursor + 1)) && (spec[n-1] == '/') {
+			regexpOption = true
+			cursor += 1
+			n -= 1
+		}
+	}
+
+	body = spec[cursor:n]
+
+	return this.searchSpec(fleetOption, regexpOption, body)
+}
+
+// Create an instance selection basing on the given specifications.
+// Each specification indicates either some instances or some fleets. In the
+// second case, select all the instances of the fleets.
+// The specification is either a plain string or a Perl regular expression.
+// The BNF for a specification is as follows:
+//
+//     spec           ::= '@' fleets-spec
+//                      | instances-spec
+//
+//     fleets-spec    ::= name-spec
+//
+//     instances-spec ::= name-spec
+//
+//     name-spec      ::= string
+//                      | '/' regexp '/'
+//
+//     regexp          -> see https://golang.org/pkg/regexp
+//
+// If there is more than a specification, their result are concatenated in the
+// result selection, conserving duplicates if there are somes.
+// Inside a specification result, the instances are ordered by UniqueIndex.
+// There is no sortition over the whole result.
+//
+func (this *Ec2Index) Select(specs []string) (*Ec2Selection, error) {
+	var selection Ec2Selection
+	var instance *Ec2Instance
+	var subsel *Ec2Selection
+	var spec string
+	var err error
+
+	selection.Instances = make([]*Ec2Instance, 0)
+
+	for _, spec = range specs {
+		subsel, err = this.selectSpec(spec)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, instance = range subsel.Instances {
+			selection.Instances =
+				append(selection.Instances, instance)
+		}
+	}
+
+	return &selection, nil
 }
