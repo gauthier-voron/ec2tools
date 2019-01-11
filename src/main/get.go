@@ -112,7 +112,7 @@ func Get(args []string) {
 	ctx = LoadContext(*optionContext)
 
 	if *optionUpdate {
-		UpdateContext(ctx)
+		// UpdateContext(ctx)
 		StoreContext(*optionContext, ctx)
 	}
 

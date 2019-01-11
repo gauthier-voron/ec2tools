@@ -141,7 +141,7 @@ func raiseInstances(list *ec2.DescribeInstancesOutput, subjob *updateSubjob) {
 // update these instances with the probed properties.
 // Return an AWS related error or nil if everything goes well.
 //
-func probeInstancesz(list []*ec2.ActiveInstance, subjob *updateSubjob) error {
+func probeInstances(list []*ec2.ActiveInstance, subjob *updateSubjob) error {
 	var output *ec2.DescribeInstancesOutput
 	var input ec2.DescribeInstancesInput
 	var instance *ec2.ActiveInstance
@@ -178,113 +178,68 @@ func probeFleetInstances(subjob *updateSubjob) error {
 		return err
 	}
 
-	return probeInstancesz(output.ActiveInstances, subjob)
+	return probeInstances(output.ActiveInstances, subjob)
 }
 
-func probeInstances(client *ec2.EC2, instances []*ec2.ActiveInstance) *map[string]*ContextInstance {
-	var instanceIds []*string = make([]*string, len(instances))
-	var ret map[string]*ContextInstance = make(map[string]*ContextInstance)
-	var result *ec2.DescribeInstancesOutput
-	var params ec2.DescribeInstancesInput
-	var ainstance *ec2.ActiveInstance
-	var reservation *ec2.Reservation
-	var instance *ec2.Instance
-	var err error
-	var idx int
-
-	if len(instances) == 0 {
-		return &ret
-	}
-
-	for idx, ainstance = range instances {
-		instanceIds[idx] = ainstance.InstanceId
-	}
-
-	params.InstanceIds = instanceIds
-	result, err = client.DescribeInstances(&params)
-	if err != nil {
-		return nil
-	}
-
-	for _, reservation = range result.Reservations {
-		for _, instance = range reservation.Instances {
-			if instance.PublicIpAddress == nil {
-				continue
-			}
-
-			ret[*instance.InstanceId] = &ContextInstance {
-				PublicIp: *instance.PublicIpAddress,
-			}
-		}
-	}
-
-	return &ret
-}
-
-func probeFleet(fleet *ContextFleet) *ContextFleet {
-	var params ec2.DescribeSpotFleetInstancesInput
-	var result *ec2.DescribeSpotFleetInstancesOutput
-	var instances *map[string]*ContextInstance
+// Build a new subjob for the given job and specific to the fleet with the
+// given name.
+//
+func newUpdateSubjob(fleetName string, job *updateJob) *updateSubjob {
+	var subjob updateSubjob
 	var sess *session.Session
-	var ret ContextFleet
-	var client *ec2.EC2
-	var err error
 
 	sess = session.New()
-	client = ec2.New(sess, &aws.Config { Region: &fleet.Region })
 
-	params.SpotFleetRequestId = &fleet.Id
-	result, err = client.DescribeSpotFleetInstances(&params)
-	if err != nil {
-		return nil
-	}
+	subjob.Parent = job
+	subjob.Fleet = job.index.FleetsByName[fleetName]
+	subjob.Client = ec2.New(sess, &aws.Config{Region:&subjob.Fleet.Region})
 
-	instances = probeInstances(client, result.ActiveInstances)
-	if instances == nil {
-		return nil
-	}
-
-	ret.Id = fleet.Id
-	ret.User = fleet.User
-	ret.Region = fleet.Region
-	ret.Instances = *instances
-
-	return &ret
+	return &subjob
 }
 
-func taskProbeFleet(fleet *ContextFleet, retchan chan *ContextFleet) {
-	var payload *ContextFleet = probeFleet(fleet)
-	retchan <-payload
+// Probe AWS to get information about a fleet with the given name and update
+// the index accordingly.
+// Return an AWS related error or nil if everything goes well.
+//
+func probeFleet(fleetName string, job *updateJob) error {
+	var subjob *updateSubjob
+
+	subjob = newUpdateSubjob(fleetName, job)
+
+	return probeFleetInstances(subjob)
 }
 
-func UpdateContext(ctx *Context) {
-	var fleetChans map[string]chan *ContextFleet
-	var fleet *ContextFleet
+// Update the given context by asking AWS.
+// Every fleet is updated in parallel.
+//
+func UpdateContext(ctx *Ec2Index) {
+	var results chan error = make(chan error)
+	var job *updateJob = newUpdateJob(ctx)
 	var fleetName string
+	var i, count int
+	var err error
 
-	fleetChans = make(map[string]chan *ContextFleet, len(ctx.Fleets))
-
-	for fleetName = range ctx.Fleets {
-		fleetChans[fleetName] = make(chan *ContextFleet)
-		go taskProbeFleet(ctx.Fleets[fleetName], fleetChans[fleetName])
+	count = 0
+	for fleetName = range ctx.FleetsByName {
+		go func() {
+			results <- probeFleet(fleetName, job)
+		}()
+		count += 1
 	}
 
-	for fleetName = range ctx.Fleets {
-		fleet = <- fleetChans[fleetName]
-
-		if fleet != nil {
-			ctx.Fleets[fleetName] = fleet
-		} else {
-			Warning("cannot update fleet '%s'", fleetName)
+	for i = 0; i < count; i++ {
+		err = <-results
+		if err != nil {
+			Error("update request failed: %s", err.Error())
 		}
-
-		close(fleetChans[fleetName])
 	}
+
+	job.terminate()
 }
 
 func Update(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var ctx *Context
+	var ctx *Ec2Index
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 
@@ -294,9 +249,9 @@ func Update(args []string) {
 		Error("unexpected operand: %s", flags.Args()[0])
 	}
 
-	ctx = LoadContext(*optionContext)
+	ctx, _ = LoadEc2Index(*optionContext)
 
 	UpdateContext(ctx)
 
-	StoreContext(*optionContext, ctx)
+	StoreEc2Index(*optionContext, ctx)
 }
