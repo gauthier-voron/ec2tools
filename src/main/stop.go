@@ -28,7 +28,7 @@ func requestStop(region string, ids []*string) bool {
 	var err error
 
 	sess = session.New()
-	client = ec2.New(sess, &aws.Config { Region: &region })
+	client = ec2.New(sess, &aws.Config{Region: &region})
 
 	params.SpotFleetRequestIds = ids
 	params.TerminateInstances = aws.Bool(true)
@@ -42,7 +42,7 @@ func requestStop(region string, ids []*string) bool {
 
 func taskRequestStop(region string, ids []*string, retchan chan bool) {
 	var payload bool = requestStop(region, ids)
-	retchan <-payload
+	retchan <- payload
 }
 
 func doRegionStops(ctx *Ec2Index, regionFleets map[string][]*string) {
@@ -61,7 +61,7 @@ func doRegionStops(ctx *Ec2Index, regionFleets map[string][]*string) {
 	}
 
 	for region = range regionFleets {
-		ret = <- regionChans[region]
+		ret = <-regionChans[region]
 
 		if ret {
 			for _, id = range regionFleets[region] {
