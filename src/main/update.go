@@ -103,6 +103,84 @@ func (this *updateJob) raise(fleetName, name, publicIp, privateIp string) {
 	this.mailbox <- &req
 }
 
+// A subpart of an update job.
+// Typically, the part of an update job specific to a given fleet.
+type updateSubjob struct {
+	Parent *updateJob // the main job of this subjob
+	Fleet  *Ec2Fleet  // the fleet specific for this subjob
+	Client *ec2.EC2   // client to use to communicate with AWS
+}
+
+// Raise a new instance to update as specified by AWS.
+// Only raise instances which already have a public IP.
+//
+func raiseInstance(instance *ec2.Instance, subjob *updateSubjob) {
+	if instance.PublicIpAddress == nil {
+		return
+	}
+
+	subjob.Parent.raise(subjob.Fleet.Name, *instance.InstanceId,
+		*instance.PublicIpAddress, *instance.PrivateIpAddress)
+}
+
+// Raise a new list of instances to update as specified by AWS.
+// Only raise instances which already have a public IP.
+//
+func raiseInstances(list *ec2.DescribeInstancesOutput, subjob *updateSubjob) {
+	var reservation *ec2.Reservation
+	var instance *ec2.Instance
+
+	for _, reservation = range list.Reservations {
+		for _, instance = range reservation.Instances {
+			raiseInstance(instance, subjob)
+		}
+	}
+}
+
+// Probe AWS to get the properties of a given list of active instances and
+// update these instances with the probed properties.
+// Return an AWS related error or nil if everything goes well.
+//
+func probeInstancesz(list []*ec2.ActiveInstance, subjob *updateSubjob) error {
+	var output *ec2.DescribeInstancesOutput
+	var input ec2.DescribeInstancesInput
+	var instance *ec2.ActiveInstance
+	var err error
+	var idx int
+
+	input.InstanceIds = make([]*string, len(list))
+
+	for idx, instance = range list {
+		input.InstanceIds[idx] = instance.InstanceId
+	}
+
+	output, err = subjob.Client.DescribeInstances(&input)
+	if err != nil {
+		return err
+	}
+
+	raiseInstances(output, subjob)
+	return nil
+}
+
+// Probe AWS to get the list of instances related to a given fleet and the
+// properties of these instances, then update the index.
+// Return an AWS related error or nil if everything goes well.
+//
+func probeFleetInstances(subjob *updateSubjob) error {
+	var input ec2.DescribeSpotFleetInstancesInput
+	var output *ec2.DescribeSpotFleetInstancesOutput
+	var err error
+
+	input.SpotFleetRequestId = &subjob.Fleet.Id
+	output, err = subjob.Client.DescribeSpotFleetInstances(&input)
+	if err != nil {
+		return err
+	}
+
+	return probeInstancesz(output.ActiveInstances, subjob)
+}
+
 func probeInstances(client *ec2.EC2, instances []*ec2.ActiveInstance) *map[string]*ContextInstance {
 	var instanceIds []*string = make([]*string, len(instances))
 	var ret map[string]*ContextInstance = make(map[string]*ContextInstance)
