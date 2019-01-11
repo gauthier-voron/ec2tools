@@ -187,12 +187,15 @@ func probeFleetInstances(subjob *updateSubjob) error {
 func newUpdateSubjob(fleetName string, job *updateJob) *updateSubjob {
 	var subjob updateSubjob
 	var sess *session.Session
+	var region string
 
 	sess = session.New()
 
 	subjob.Parent = job
 	subjob.Fleet = job.index.FleetsByName[fleetName]
-	subjob.Client = ec2.New(sess, &aws.Config{Region:&subjob.Fleet.Region})
+
+	region = subjob.Fleet.Region
+	subjob.Client = ec2.New(sess, &aws.Config{Region: &region})
 
 	return &subjob
 }
@@ -245,7 +248,7 @@ func Update(args []string) {
 
 	flags.Parse(args[1:])
 
-	if (len(flags.Args()) > 0) {
+	if len(flags.Args()) > 0 {
 		Error("unexpected operand: %s", flags.Args()[0])
 	}
 
