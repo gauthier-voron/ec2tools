@@ -20,6 +20,89 @@ Options:
 		PROGNAME, DEFAULT_CONTEXT)
 }
 
+// The information necessary to perform a concurrent update of an Ec2Index by
+// probing AWS.
+//
+type updateJob struct {
+	index   *Ec2Index
+	mailbox chan *updateGoRequest
+	ack     chan bool
+}
+
+// A concurrent update request to add a new instance to a given fleet.
+// This is to be sent to a central updater goroutine.
+//
+type updateGoRequest struct {
+	fleetName    string // name of the fleet to add an instance
+	instanceName string // name of the instance to add
+	publicIp     string // public IPv4 of the instance to add
+	privateIp    string // private IPv4 of the instance to add
+}
+
+// Receive concurrent update requests to the context and modify the context
+// sequentially.
+// Receive the update through a channel.
+// Return when the channel is closed.
+//
+func updateIndex(job *updateJob) {
+	var req *updateGoRequest
+	var instance *Ec2Instance
+	var found bool
+
+	for req = range job.mailbox {
+		instance, found = job.index.InstancesByName[req.instanceName]
+
+		if found {
+			instance.PublicIp = req.publicIp
+			instance.PrivateIp = req.privateIp
+		} else {
+			job.index.FleetsByName[req.fleetName].AddEc2Instance(
+				req.instanceName, req.publicIp, req.privateIp)
+		}
+	}
+
+	job.ack <- true
+}
+
+// Create a new update job that goroutine can use to update concurrently a
+// given Ec2Index.
+//
+func newUpdateJob(index *Ec2Index) *updateJob {
+	var job updateJob
+
+	job.index = index
+	job.mailbox = make(chan *updateGoRequest, 16)
+	job.ack = make(chan bool)
+
+	go updateIndex(&job)
+
+	return &job
+}
+
+// Terminate an update job.
+// Wait for any pending update to finish, then free associated resources.
+// Ensure the related index is not modified after this call returns.
+//
+func (this *updateJob) terminate() {
+	close(this.mailbox)
+	<-this.ack
+}
+
+// Signal an instance and its properties to the central updater routine.
+// If the central updater already know the instance and it has not changed
+// since the last update, it ignores it silently.
+//
+func (this *updateJob) raise(fleetName, name, publicIp, privateIp string) {
+	var req updateGoRequest
+
+	req.fleetName = fleetName
+	req.instanceName = name
+	req.publicIp = publicIp
+	req.privateIp = privateIp
+
+	this.mailbox <- &req
+}
+
 func probeInstances(client *ec2.EC2, instances []*ec2.ActiveInstance) *map[string]*ContextInstance {
 	var instanceIds []*string = make([]*string, len(instances))
 	var ret map[string]*ContextInstance = make(map[string]*ContextInstance)
