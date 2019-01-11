@@ -192,8 +192,7 @@ func doLaunch(fleetName string) {
 
 	if ctx.FleetsByName[fleetName] != nil {
 		if *optionReplace {
-			// DoStop(ctx, []string{fleetName})
-			// TODO
+			DoStop(ctx, []string{fleetName})
 		} else {
 			Error("fleet '%s' already exists", fleetName)
 		}
