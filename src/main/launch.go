@@ -178,16 +178,22 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 
 func doLaunch(fleetName string) {
 	var fleetRequest *ec2.RequestSpotFleetInput = buildFleetRequest()
-	var ctx *Context = LoadContext(*optionContext)
 	var response *ec2.RequestSpotFleetOutput
 	var sess *session.Session
 	var req *request.Request
 	var client *ec2.EC2
+	var ctx *Ec2Index
 	var err error
 
-	if ctx.Fleets[fleetName] != nil {
+	ctx, err = LoadEc2Index(*optionContext)
+	if err != nil {
+		ctx = NewEc2Index()
+	}
+
+	if ctx.FleetsByName[fleetName] != nil {
 		if *optionReplace {
-			DoStop(ctx, []string { fleetName })
+			// DoStop(ctx, []string{fleetName})
+			// TODO
 		} else {
 			Error("fleet '%s' already exists", fleetName)
 		}
@@ -202,9 +208,10 @@ func doLaunch(fleetName string) {
 		Error("launch request failed: %s", err.Error())
 	}
 
-	ctx.AddFleet(fleetName, *response.SpotFleetRequestId, *optionUser,
+	ctx.AddEc2Fleet(*response.SpotFleetRequestId, fleetName, *optionUser,
 		*optionRegion)
-	StoreContext(*optionContext, ctx)
+
+	StoreEc2Index(*optionContext, ctx)
 }
 
 func Launch(args []string) {
