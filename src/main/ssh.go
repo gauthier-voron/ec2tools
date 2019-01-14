@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sort"
 	"syscall"
 	"time"
 )
@@ -342,65 +341,6 @@ func checkExitMode(mode string) bool {
 	} else {
 		return false
 	}
-}
-
-func BuildAllSshContext(ctx *Context) *sshContext {
-	var all []string = make([]string, 0)
-	var fleetName, instanceId string
-
-	for fleetName = range ctx.Fleets {
-		for instanceId = range ctx.Fleets[fleetName].Instances {
-			all = append(all, instanceId)
-		}
-	}
-
-	return BuildSshContext(ctx, all)
-}
-
-func BuildSshContext(ctx *Context, instanceIds []string) *sshContext {
-	var sctx map[string]*sshInstanceContext
-	var totalIndex, fleetIndex int
-	var names, ids []string
-	var name, id string
-
-	sctx = make(map[string]*sshInstanceContext)
-
-	names = make([]string, 0, len(ctx.Fleets))
-	for name = range ctx.Fleets {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	totalIndex = 0
-	for _, name = range names {
-		ids = make([]string, 0, len(ctx.Fleets[name].Instances))
-		for id = range ctx.Fleets[name].Instances {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-
-		fleetIndex = 0
-		for _, id = range ids {
-			sctx[id] = &sshInstanceContext {
-				fleet: name,
-				ip: ctx.Fleets[name].Instances[id].PublicIp,
-				user: ctx.Fleets[name].User,
-				fleetIndex: fleetIndex,
-				totalIndex: totalIndex,
-			}
-
-			fleetIndex += 1
-			totalIndex += 1
-		}
-	}
-
-	for _, id = range instanceIds {
-		if sctx[id] == nil {
-			Error("unknown instance-id: '%s'", id)
-		}
-	}
-
-	return &sshContext { sctx }
 }
 
 func Ssh(args []string) {
