@@ -109,6 +109,11 @@ Examples:
 		PROGNAME, PROGNAME)
 }
 
+// Sort the instances inplace depending on the given sortkeys.
+// The lengths of instances.Instances and sortkeys must be the same so for one
+// instance, there is one sortkey.
+// There can be duplicated values in sortkeys.
+//
 func sortInstances(instances *Ec2Selection, sortkeys []string) {
 	var smap map[string][]*Ec2Instance
 	var instance *Ec2Instance
@@ -144,6 +149,9 @@ func sortInstances(instances *Ec2Selection, sortkeys []string) {
 	}
 }
 
+// Remove duplicates from the given instances, preserving the order of the
+// first occurence of each instance.
+//
 func uniqueInstances(instances *Ec2Selection) {
 	var umap map[int]*Ec2Instance = make(map[int]*Ec2Instance)
 	var unique []*Ec2Instance = make([]*Ec2Instance, 0)
@@ -159,6 +167,9 @@ func uniqueInstances(instances *Ec2Selection) {
 	instances.Instances = unique
 }
 
+// Create a slice of string that contains every first occurence of each string
+// found in the given results slice, in the same order.
+//
 func uniqueResults(results []string) []string {
 	var umap map[string]bool = make(map[string]bool)
 	var unique []string = make([]string, 0, len(results))
@@ -176,6 +187,8 @@ func uniqueResults(results []string) []string {
 	return unique
 }
 
+// Return a slice containing all the fleet names for a given Ec2Index.
+//
 func GetAllFleets(idx *Ec2Index) []string {
 	var results []string = make([]string, 0, len(idx.FleetsByName))
 	var name string
@@ -187,6 +200,12 @@ func GetAllFleets(idx *Ec2Index) []string {
 	return results
 }
 
+// Return a slice containing the name of each instance of the given
+// Ec2Selection.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetNames(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -198,6 +217,12 @@ func GetNames(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the public IPv4 address of each instance of the
+// given Ec2Selection.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetPublicIps(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -209,6 +234,12 @@ func GetPublicIps(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the private IPv4 address of each instance of the
+// given Ec2Selection.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetPrivateIps(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -220,6 +251,12 @@ func GetPrivateIps(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the region code of each instance of the given
+// Ec2Selection.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetRegions(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -231,6 +268,12 @@ func GetRegions(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the connection username of each instance of the
+// given Ec2Selection.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetUsers(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -242,6 +285,12 @@ func GetUsers(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the fleet index of each instance of the given
+// Ec2Selection (as a string).
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetFiids(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -253,6 +302,12 @@ func GetFiids(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the fleet name of each instance of the given
+// Ec2Selection.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetFleets(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -264,6 +319,12 @@ func GetFleets(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the unique index of each instance of the given
+// Ec2Selection (as a string).
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func GetUiids(instances *Ec2Selection) []string {
 	var results []string = make([]string, 0, len(instances.Instances))
 	var instance *Ec2Instance
@@ -275,6 +336,12 @@ func GetUiids(instances *Ec2Selection) []string {
 	return results
 }
 
+// Return a slice containing the property value of each instance of the given
+// Ec2Selection, given this property name as a string.
+// The string values appear in the same order than the instances do.
+// If their are duplicate instances in the given Ec2Selection, there are
+// duplicate string values in the returned slice as well.
+//
 func getInstancesProperty(instances *Ec2Selection, property string) []string {
 	if property == "name" {
 		return GetNames(instances)
