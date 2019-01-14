@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sort"
 	"syscall"
 	"time"
 )
@@ -28,8 +27,8 @@ type sshContext struct {
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
-var DEFAULT_TIMEOUT int64  = -1
-var DEFAULT_VERBOSE bool   = false
+var DEFAULT_TIMEOUT int64 = -1
+var DEFAULT_VERBOSE bool = false
 
 var optionErrmode *string
 var optionExtmode *string
@@ -76,14 +75,14 @@ Modes:
 `,
 		PROGNAME, DEFAULT_CONTEXT, DEFAULT_ERRMODE, DEFAULT_EXTMODE,
 		DEFAULT_OUTMODE, DEFAULT_TIMEOUT,
-		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE);
+		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
-func buildCommand(rctx *ReverseContext, instanceId string, command []string) *exec.Cmd {
+func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 	var cmd *exec.Cmd
 	var user, dest string
 	var cctx context.Context
-	var sshcmd []string = []string {
+	var sshcmd []string = []string{
 		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
 		"-o", "UserKnownHostsFile=/dev/null",
 	}
@@ -100,10 +99,10 @@ func buildCommand(rctx *ReverseContext, instanceId string, command []string) *ex
 	if *optionUser != "" {
 		user = *optionUser
 	} else {
-		user = rctx.InstanceProperties[instanceId].User
+		user = instance.Fleet.User
 	}
 
-	dest = user + "@" + rctx.InstanceProperties[instanceId].PublicIp
+	dest = user + "@" + instance.PublicIp
 
 	sshcmd = append(sshcmd, dest)
 	sshcmd = append(sshcmd, command...)
@@ -112,7 +111,7 @@ func buildCommand(rctx *ReverseContext, instanceId string, command []string) *ex
 		cmd = exec.Command("ssh", sshcmd...)
 	} else {
 		cctx, _ = context.WithTimeout(context.Background(),
-			time.Duration(*optionTimeout) * time.Second)
+			time.Duration(*optionTimeout)*time.Second)
 		cmd = exec.CommandContext(cctx, "ssh", sshcmd...)
 	}
 
@@ -139,12 +138,12 @@ func taskTransmitPrefix(instanceId string, from *io.ReadCloser, to *os.File) {
 	}
 }
 
-func transmitAllPrefix(instanceIds []string, froms []io.ReadCloser, to *os.File) {
-	var instanceId string
+func transmitAllPrefix(instances *Ec2Selection, froms []io.ReadCloser, to *os.File) {
+	var instance *Ec2Instance
 	var idx int
 
-	for idx, instanceId = range instanceIds {
-		go taskTransmitPrefix(instanceId, &froms[idx], to)
+	for idx, instance = range instances.Instances {
+		go taskTransmitPrefix(instance.Name, &froms[idx], to)
 	}
 }
 
@@ -269,18 +268,18 @@ func collectExitEagerGreatest(cmds []*exec.Cmd) int {
 	return max
 }
 
-func doSsh(rctx *ReverseContext, command []string) {
-	var length int = len(rctx.SelectedInstances)
+func doSsh(instances *Ec2Selection, command []string) {
+	var length int = len(instances.Instances)
 	var stdouts []io.ReadCloser = make([]io.ReadCloser, length)
 	var stderrs []io.ReadCloser = make([]io.ReadCloser, length)
 	var stdins []io.WriteCloser = make([]io.WriteCloser, length)
 	var cmds []*exec.Cmd = make([]*exec.Cmd, length)
-	var instanceId string
+	var instance *Ec2Instance
 	var err error
 	var idx int
 
-	for idx, instanceId = range rctx.SelectedInstances {
-		cmds[idx] = buildCommand(rctx, instanceId, command)
+	for idx, instance = range instances.Instances {
+		cmds[idx] = buildCommand(instance, command)
 
 		stdins[idx], err = cmds[idx].StdinPipe()
 		if err != nil {
@@ -298,7 +297,7 @@ func doSsh(rctx *ReverseContext, command []string) {
 		}
 	}
 
-	for idx, instanceId = range rctx.SelectedInstances {
+	for idx, _ = range instances.Instances {
 		err = cmds[idx].Start()
 		if err != nil {
 			Error("cannot launch command '%s'\n", command)
@@ -306,7 +305,7 @@ func doSsh(rctx *ReverseContext, command []string) {
 	}
 
 	if *optionOutmode == "all-prefix" {
-		transmitAllPrefix(rctx.SelectedInstances, stdouts, os.Stdout)
+		transmitAllPrefix(instances, stdouts, os.Stdout)
 	} else if *optionOutmode == "merge-parallel" {
 		transmitMergeParallel(stdouts, os.Stdout)
 	} else {
@@ -314,7 +313,7 @@ func doSsh(rctx *ReverseContext, command []string) {
 	}
 
 	if *optionErrmode == "all-prefix" {
-		transmitAllPrefix(rctx.SelectedInstances, stderrs, os.Stderr)
+		transmitAllPrefix(instances, stderrs, os.Stderr)
 	} else if *optionErrmode == "merge-parallel" {
 		transmitMergeParallel(stderrs, os.Stderr)
 	} else {
@@ -344,73 +343,15 @@ func checkExitMode(mode string) bool {
 	}
 }
 
-func BuildAllSshContext(ctx *Context) *sshContext {
-	var all []string = make([]string, 0)
-	var fleetName, instanceId string
-
-	for fleetName = range ctx.Fleets {
-		for instanceId = range ctx.Fleets[fleetName].Instances {
-			all = append(all, instanceId)
-		}
-	}
-
-	return BuildSshContext(ctx, all)
-}
-
-func BuildSshContext(ctx *Context, instanceIds []string) *sshContext {
-	var sctx map[string]*sshInstanceContext
-	var totalIndex, fleetIndex int
-	var names, ids []string
-	var name, id string
-
-	sctx = make(map[string]*sshInstanceContext)
-
-	names = make([]string, 0, len(ctx.Fleets))
-	for name = range ctx.Fleets {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	totalIndex = 0
-	for _, name = range names {
-		ids = make([]string, 0, len(ctx.Fleets[name].Instances))
-		for id = range ctx.Fleets[name].Instances {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-
-		fleetIndex = 0
-		for _, id = range ids {
-			sctx[id] = &sshInstanceContext {
-				fleet: name,
-				ip: ctx.Fleets[name].Instances[id].PublicIp,
-				user: ctx.Fleets[name].User,
-				fleetIndex: fleetIndex,
-				totalIndex: totalIndex,
-			}
-
-			fleetIndex += 1
-			totalIndex += 1
-		}
-	}
-
-	for _, id = range instanceIds {
-		if sctx[id] == nil {
-			Error("unknown instance-id: '%s'", id)
-		}
-	}
-
-	return &sshContext { sctx }
-}
-
 func Ssh(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var instanceIds []string
+	var instances *Ec2Selection
 	var command []string
-	var rctx *ReverseContext
-	var arg, errstr string
-	var instances bool
-	var ctx *Context
+	var specs []string
+	var hasSpecs bool
+	var ctx *Ec2Index
+	var arg string
+	var err error
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionErrmode = flags.String("error-mode", DEFAULT_ERRMODE, "")
@@ -423,15 +364,15 @@ func Ssh(args []string) {
 	flags.Parse(args[1:])
 	args = flags.Args()
 
-	if (len(args) < 1) {
+	if len(args) < 1 {
 		Error("missing instance-id operand")
 	}
 
-	instances = false
+	hasSpecs = false
 	for _, arg = range args {
-		if (arg == "--") && !instances {
-			instances = true
-			instanceIds = command
+		if (arg == "--") && !hasSpecs {
+			hasSpecs = true
+			specs = command
 			command = make([]string, 0)
 			continue
 		}
@@ -447,16 +388,19 @@ func Ssh(args []string) {
 		Error("invalid stream-mode for stdout: '%s'", *optionOutmode)
 	}
 
-	ctx = LoadContext(*optionContext)
+	ctx, err = LoadEc2Index(*optionContext)
+	if err != nil {
+		Error("no context: %s", *optionContext)
+	}
 
-	if len(instanceIds) == 0 {
-		rctx = ctx.BuildReverse()
+	if !hasSpecs {
+		instances, _ = ctx.Select([]string{"//"})
 	} else {
-		errstr, rctx = ctx.BuildReverseFor(instanceIds)
-		if errstr != "" {
-			Error("invalid instance-id: '%s'", errstr)
+		instances, err = ctx.Select(specs)
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
 		}
 	}
 
-	doSsh(rctx, command)
+	doSsh(instances, command)
 }
