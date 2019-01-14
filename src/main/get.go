@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"strconv"
 )
 
 var DEFAULT_UPDATE bool = false
@@ -174,6 +175,94 @@ func GetAllFleets(idx *Ec2Index) []string {
 
 	for name = range idx.FleetsByName {
 		results = append(results, name)
+	}
+
+	return results
+}
+
+func GetNames(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, instance.Name)
+	}
+
+	return results
+}
+
+func GetPublicIps(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, instance.PublicIp)
+	}
+
+	return results
+}
+
+func GetPrivateIps(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, instance.PrivateIp)
+	}
+
+	return results
+}
+
+func GetRegions(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, instance.Fleet.Region)
+	}
+
+	return results
+}
+
+func GetUsers(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, instance.Fleet.User)
+	}
+
+	return results
+}
+
+func GetFiids(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, strconv.Itoa(instance.FleetIndex))
+	}
+
+	return results
+}
+
+func GetFleets(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, instance.Fleet.Name)
+	}
+
+	return results
+}
+
+func GetUiids(instances *Ec2Selection) []string {
+	var results []string = make([]string, 0, len(instances.Instances))
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		results = append(results, strconv.Itoa(instance.UniqueIndex))
 	}
 
 	return results
