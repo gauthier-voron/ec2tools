@@ -224,9 +224,9 @@ func UpdateContext(ctx *Ec2Index) {
 
 	count = 0
 	for fleetName = range ctx.FleetsByName {
-		go func() {
+		go func(fleetName string) {
 			results <- probeFleet(fleetName, job)
-		}()
+		}(fleetName)
 		count += 1
 	}
 
