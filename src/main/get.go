@@ -7,8 +7,16 @@ import (
 	"strconv"
 )
 
+var DEFAULT_SORT bool = false
+var DEFAULT_SORT_BY string = ""
+var DEFAULT_UNIQUE_INSTANCES bool = false
+var DEFAULT_UNIQUE_RESULTS bool = false
 var DEFAULT_UPDATE bool = false
 
+var optionSort *bool
+var optionSortBy *string
+var optionUniqueInstances *bool
+var optionUniqueResults *bool
 var optionUpdate *bool
 
 func PrintGetUsage() {
@@ -365,9 +373,18 @@ func getInstancesProperty(instances *Ec2Selection, property string) []string {
 
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var ctx *Context
+	var instances *Ec2Selection
+	var results []string
+	var sortkeys []string
+	var idx *Ec2Index
+	var result string
+	var err error
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
+	optionSort = flags.Bool("sort", DEFAULT_SORT, "")
+	optionSortBy = flags.String("sort-by", DEFAULT_SORT_BY, "")
+	optionUniqueInstances = flags.Bool("unique-instances", DEFAULT_UNIQUE_INSTANCES, "")
+	optionUniqueResults = flags.Bool("unique-results", DEFAULT_UNIQUE_RESULTS, "")
 	optionUpdate = flags.Bool("update", DEFAULT_UPDATE, "")
 
 	flags.Parse(args[1:])
@@ -377,22 +394,55 @@ func Get(args []string) {
 		Error("missing type operand")
 	}
 
-	ctx = LoadContext(*optionContext)
+	if *optionSort {
+		if *optionSortBy != DEFAULT_SORT_BY {
+			Error("options 'sort' and 'sort-by' are exclusives")
+		} else {
+			*optionSortBy = "uiid"
+		}
+	}
+
+	idx, err = LoadEc2Index(*optionContext)
+	if err != nil {
+		Error("no context: %s", *optionContext)
+	}
 
 	if *optionUpdate {
-		// UpdateContext(ctx)
-		StoreContext(*optionContext, ctx)
+		UpdateContext(idx)
+		StoreEc2Index(*optionContext, idx)
 	}
 
 	if args[0] == "fleets" {
-		getFleets(args[1:], ctx)
-	} else if args[0] == "instances" {
-		getInstances(args[1:], ctx)
-	} else if args[0] == "ip" {
-		getIp(args[1:], ctx)
-	} else if args[0] == "user" {
-		getUser(args[1:], ctx)
+		results = GetAllFleets(idx)
 	} else {
-		Error("invalid type operand: '%s'", args[0])
+		if len(args) == 1 {
+			instances, _ = idx.Select([]string{"//"})
+		} else {
+			instances, err = idx.Select(args[1:])
+			if err != nil {
+				Error("invalid specification: %s", err.Error())
+			}
+		}
+
+		if *optionUniqueInstances {
+			uniqueInstances(instances)
+		}
+
+		if *optionSortBy != "" {
+			sortkeys = getInstancesProperty(instances,
+				*optionSortBy)
+
+			sortInstances(instances, sortkeys)
+		}
+
+		results = getInstancesProperty(instances, args[0])
+	}
+
+	if *optionUniqueResults {
+		results = uniqueResults(results)
+	}
+
+	for _, result = range results {
+		fmt.Println(result)
 	}
 }
