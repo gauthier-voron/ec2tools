@@ -168,6 +168,17 @@ func getIp(args []string, ctx *Context) {
 func getUser(args []string, ctx *Context) {
 }
 
+func GetAllFleets(idx *Ec2Index) []string {
+	var results []string = make([]string, 0, len(idx.FleetsByName))
+	var name string
+
+	for name = range idx.FleetsByName {
+		results = append(results, name)
+	}
+
+	return results
+}
+
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var ctx *Context
