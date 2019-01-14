@@ -57,7 +57,7 @@ Format:
 		DEFAULT_CONTEXT)
 }
 
-func buildScpCommand(rctx *ReverseContext, instanceId, local, source string) *exec.Cmd {
+func buildScpCommand(instance *Ec2Instance, local, source string) *exec.Cmd {
 	var user, remote string
 	var scpcmd []string = []string {
 		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
@@ -71,10 +71,10 @@ func buildScpCommand(rctx *ReverseContext, instanceId, local, source string) *ex
 	if *optionUser != "" {
 		user = *optionUser
 	} else {
-		user = rctx.InstanceProperties[instanceId].User
+		user = instance.Fleet.User
 	}
 
-	remote = user + "@" + rctx.InstanceProperties[instanceId].PublicIp
+	remote = user + "@" + instance.PublicIp
 
 	if source == "" {
 		scpcmd = append(scpcmd, local, remote + ":")
@@ -85,8 +85,7 @@ func buildScpCommand(rctx *ReverseContext, instanceId, local, source string) *ex
 	return exec.Command("scp", scpcmd...)
 }
 
-func buildDestPath(rctx *ReverseContext, pattern, instanceId string) string {
-	var prop *ReverseContextInstance = rctx.InstanceProperties[instanceId]
+func buildDestPath(instance *Ec2Instance, pattern string) string {
 	var percent bool = false
 	var ret string = ""
 	var pos int = 0
@@ -98,15 +97,15 @@ func buildDestPath(rctx *ReverseContext, pattern, instanceId string) string {
 		if percent {
 			switch c {
 			case 'd':
-				ret += fmt.Sprintf("%d", prop.FleetIndex)
+				ret += fmt.Sprintf("%d", instance.FleetIndex)
 			case 'D':
-				ret += fmt.Sprintf("%d", prop.TotalIndex)
+				ret += fmt.Sprintf("%d", instance.UniqueIndex)
 			case 'f':
-				ret += prop.FleetName
+				ret += instance.Fleet.Name
 			case 'i':
-				ret += instanceId
+				ret += instance.Name
 			case 'I':
-				ret += prop.PublicIp
+				ret += instance.PublicIp
 			case '%':
 				ret += "%"
 			default:
@@ -128,13 +127,12 @@ func buildDestPath(rctx *ReverseContext, pattern, instanceId string) string {
 	return ret
 }
 
-func taskReceive(rctx *ReverseContext, id, local, source string,
-	         notif chan bool) {
-	var dest string = buildDestPath(rctx, local, id)
+func taskReceive(instance *Ec2Instance, local, source string, notif chan bool){
+	var dest string = buildDestPath(instance, local)
 	var cmd *exec.Cmd
 	var err error
 
-	cmd = buildScpCommand(rctx, id, dest, source)
+	cmd = buildScpCommand(instance, dest, source)
 	err = cmd.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err.Error())
@@ -143,17 +141,17 @@ func taskReceive(rctx *ReverseContext, id, local, source string,
 	notif <- (err == nil)
 }
 
-func doReceive(rctx *ReverseContext, local, source string) {
+func doReceive(instances *Ec2Selection, local, source string) {
 	var waiter chan bool = make(chan bool)
-	var instanceId string
+	var instance *Ec2Instance
 	var success bool
 
-	for _, instanceId = range rctx.SelectedInstances {
-		go taskReceive(rctx, instanceId, local, source, waiter)
+	for _, instance = range instances.Instances {
+		go taskReceive(instance, local, source, waiter)
 	}
 
 	success = true
-	for _, instanceId = range rctx.SelectedInstances {
+	for _, instance = range instances.Instances {
 		success = success && <-waiter
 	}
 
@@ -166,12 +164,11 @@ func doReceive(rctx *ReverseContext, local, source string) {
 	}
 }
 
-func taskSend(rctx *ReverseContext, instanceId, local string,
-	      notifier chan bool) {
+func taskSend(instance *Ec2Instance, local string, notifier chan bool) {
 	var cmd *exec.Cmd
 	var err error
 
-	cmd = buildScpCommand(rctx, instanceId, local, "")
+	cmd = buildScpCommand(instance, local, "")
 	err = cmd.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err.Error())
@@ -180,17 +177,17 @@ func taskSend(rctx *ReverseContext, instanceId, local string,
 	notifier <- (err == nil)
 }
 
-func doSend(rctx *ReverseContext, local string) {
+func doSend(instances *Ec2Selection, local string) {
 	var waiter chan bool = make(chan bool)
-	var instanceId string
+	var instance *Ec2Instance
 	var success bool
 
-	for _, instanceId = range rctx.SelectedInstances {
-		go taskSend(rctx, instanceId, local, waiter)
+	for _, instance = range instances.Instances {
+		go taskSend(instance, local, waiter)
 	}
 
 	success = true
-	for _, instanceId = range rctx.SelectedInstances {
+	for _, instance = range instances.Instances {
 		success = success && <-waiter
 	}
 
@@ -218,11 +215,11 @@ func getAllInstanceIds(ctx *Context) *sshContext {
 
 func Scp(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var instanceIds []string
+	var instances *Ec2Selection
+	var specs []string
 	var local, source string
-	var rctx *ReverseContext
-	var errstr string
-	var ctx *Context
+	var ctx *Ec2Index
+	var err error
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionForceSend = flags.Bool("force-send", DEFAULT_FORCE_SEND, "")
@@ -243,26 +240,29 @@ func Scp(args []string) {
 			Error("missing source-file operand");
 		}
 		source = args[1]
-		instanceIds = args[2:]
+		specs = args[2:]
 	} else {
 		source = ""
-		instanceIds = args[1:]
+		specs = args[1:]
 	}
 
-	ctx = LoadContext(*optionContext)
+	ctx, err = LoadEc2Index(*optionContext)
+	if err != nil {
+		Error("no context: %s", *optionContext)
+	}
 
-	if len(instanceIds) > 1 {
-		errstr, rctx = ctx.BuildReverseFor(instanceIds)
-		if errstr != "" {
-			Error("invalid instance-id: '%s'", errstr)
+	if len(specs) >= 1 {
+		instances, err = ctx.Select(specs)
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
 		}
 	} else {
-		rctx = ctx.BuildReverse()
+		instances, _ = ctx.Select([]string{"//"})
 	}
 
 	if source != "" {
-		doReceive(rctx, local, source)
+		doReceive(instances, local, source)
 	} else {
-		doSend(rctx, local)
+		doSend(instances, local)
 	}
 }
