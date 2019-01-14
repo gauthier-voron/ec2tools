@@ -59,7 +59,7 @@ Format:
 
 func buildScpCommand(instance *Ec2Instance, local, source string) *exec.Cmd {
 	var user, remote string
-	var scpcmd []string = []string {
+	var scpcmd []string = []string{
 		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
 		"-o", "UserKnownHostsFile=/dev/null", "-r",
 	}
@@ -77,9 +77,9 @@ func buildScpCommand(instance *Ec2Instance, local, source string) *exec.Cmd {
 	remote = user + "@" + instance.PublicIp
 
 	if source == "" {
-		scpcmd = append(scpcmd, local, remote + ":")
+		scpcmd = append(scpcmd, local, remote+":")
 	} else {
-		scpcmd = append(scpcmd, remote + ":" + source, local)
+		scpcmd = append(scpcmd, remote+":"+source, local)
 	}
 
 	return exec.Command("scp", scpcmd...)
@@ -109,7 +109,7 @@ func buildDestPath(instance *Ec2Instance, pattern string) string {
 			case '%':
 				ret += "%"
 			default:
-				Error("invalid format pattern: '%%%c' " +
+				Error("invalid format pattern: '%%%c' "+
 					"(character %d)", c, pos)
 			}
 
@@ -127,12 +127,12 @@ func buildDestPath(instance *Ec2Instance, pattern string) string {
 	return ret
 }
 
-func taskReceive(instance *Ec2Instance, local, source string, notif chan bool){
+func taskReceive(instance *Ec2Instance, local, src string, notif chan bool) {
 	var dest string = buildDestPath(instance, local)
 	var cmd *exec.Cmd
 	var err error
 
-	cmd = buildScpCommand(instance, dest, source)
+	cmd = buildScpCommand(instance, dest, src)
 	err = cmd.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err.Error())
@@ -217,14 +217,14 @@ func Scp(args []string) {
 	args = flags.Args()
 
 	if len(args) < 1 {
-		Error("missing source-file operand");
+		Error("missing source-file operand")
 	}
 
 	local = args[0]
 
 	if strings.Contains(local, "%") && !*optionForceSend {
 		if len(args) < 2 {
-			Error("missing source-file operand");
+			Error("missing source-file operand")
 		}
 		source = args[1]
 		specs = args[2:]
