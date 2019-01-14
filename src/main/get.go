@@ -169,6 +169,38 @@ func getIp(args []string, ctx *Context) {
 func getUser(args []string, ctx *Context) {
 }
 
+func uniqueInstances(instances *Ec2Selection) {
+	var umap map[int]*Ec2Instance = make(map[int]*Ec2Instance)
+	var unique []*Ec2Instance = make([]*Ec2Instance, 0)
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		if umap[instance.UniqueIndex] == nil {
+			umap[instance.UniqueIndex] = instance
+			unique = append(unique, instance)
+		}
+	}
+
+	instances.Instances = unique
+}
+
+func uniqueResults(results []string) []string {
+	var umap map[string]bool = make(map[string]bool)
+	var unique []string = make([]string, 0, len(results))
+	var result string
+	var found bool
+
+	for _, result = range results {
+		_, found = umap[result]
+		if !found {
+			umap[result] = true
+			unique = append(unique, result)
+		}
+	}
+
+	return unique
+}
+
 func GetAllFleets(idx *Ec2Index) []string {
 	var results []string = make([]string, 0, len(idx.FleetsByName))
 	var name string
