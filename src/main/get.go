@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"sort"
 	"strconv"
 )
 
@@ -167,6 +168,43 @@ func getIp(args []string, ctx *Context) {
 }
 
 func getUser(args []string, ctx *Context) {
+}
+
+
+
+func sortInstances(instances *Ec2Selection, sortkeys []string) {
+	var smap map[string][]*Ec2Instance
+	var instance *Ec2Instance
+	var key, prev string
+	var i int
+
+	if len(sortkeys) == 0 {
+		return
+	}
+
+	smap = make(map[string][]*Ec2Instance)
+
+	for i, key = range sortkeys {
+		smap[key] = append(smap[key], instances.Instances[i])
+	}
+
+	sort.Strings(sortkeys)
+
+	instances.Instances = make([]*Ec2Instance, 0, len(sortkeys))
+
+	prev = sortkeys[0] + " "
+	for i, key = range sortkeys {
+		if key == prev {
+			continue
+		}
+
+		for _, instance = range smap[key] {
+			instances.Instances = append(instances.Instances,
+				instance)
+		}
+
+		prev = key
+	}
 }
 
 func uniqueInstances(instances *Ec2Selection) {
