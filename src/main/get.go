@@ -318,8 +318,8 @@ func Get(args []string) {
 
 	flags.Parse(args[1:])
 	args = flags.Args()
-	
-	if (len(args) < 1) {
+
+	if len(args) < 1 {
 		Error("missing type operand")
 	}
 
