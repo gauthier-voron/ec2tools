@@ -15,11 +15,11 @@ Display a help message for the specified command.
 func Help(args []string) {
 	var command string
 
-	if (len(args) > 2) {
+	if len(args) > 2 {
 		Error("unexpected operand: %s", args[2])
 	}
 
-	if (len(args) < 2) {
+	if len(args) < 2 {
 		PrintUsage()
 		return
 	}
