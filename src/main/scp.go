@@ -200,19 +200,6 @@ func doSend(instances *Ec2Selection, local string) {
 	}
 }
 
-func getAllInstanceIds(ctx *Context) *sshContext {
-	var ret []string = make([]string, 0)
-	var fleetName, instanceId string
-
-	for fleetName = range ctx.Fleets {
-		for instanceId = range ctx.Fleets[fleetName].Instances {
-			ret = append(ret, instanceId)
-		}
-	}
-
-	return BuildSshContext(ctx, ret)
-}
-
 func Scp(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var instances *Ec2Selection
