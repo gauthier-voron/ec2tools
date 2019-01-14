@@ -12,16 +12,16 @@ import (
 
 var IAM_FLEET_ROLE string = "arn:aws:iam::965630252549:role/aws-ec2-spot-fleet-tagging-role"
 
-var DEFAULT_IMAGE string    = "ami-33ab5251"
-var DEFAULT_KEY string      = "default"
-var DEFAULT_PRICE float64   = 0.01
-var DEFAULT_REGION string   = "ap-southeast-2"
-var DEFAULT_REPLACE bool    = false
+var DEFAULT_IMAGE string = "ami-33ab5251"
+var DEFAULT_KEY string = "default"
+var DEFAULT_PRICE float64 = 0.01
+var DEFAULT_REGION string = "ap-southeast-2"
+var DEFAULT_REPLACE bool = false
 var DEFAULT_SECGROUP string = "sg-0e9b9bbee1dfc700a"
-var DEFAULT_SIZE int64      = 1
-var DEFAULT_TIME string     = "1h"
-var DEFAULT_TYPE string     = "c5.large"
-var DEFAULT_USER string     = "ubuntu"
+var DEFAULT_SIZE int64 = 1
+var DEFAULT_TIME string = "1h"
+var DEFAULT_TYPE string = "c5.large"
+var DEFAULT_USER string = "ubuntu"
 
 var optionImage *string
 var optionKey *string
@@ -60,7 +60,7 @@ Options:
 }
 
 func timespecToSec(timespec string) int64 {
-	var mode int = 0  // 0 = num/sp, 1 = num, 2 = unit, 3 = sp
+	var mode int = 0 // 0 = num/sp, 1 = num, 2 = unit, 3 = sp
 	var defaultMult int64 = 1
 	var acc int64 = 0
 	var ret int64 = 0
@@ -154,8 +154,8 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	spec.ImageId = optionImage
 	spec.InstanceType = optionType
 	spec.KeyName = optionKey
-	spec.SecurityGroups = []*ec2.GroupIdentifier {
-		&ec2.GroupIdentifier {
+	spec.SecurityGroups = []*ec2.GroupIdentifier{
+		&ec2.GroupIdentifier{
 			GroupId: aws.String(*optionSecgroup),
 		},
 	}
@@ -166,13 +166,13 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	conf.TerminateInstancesWithExpiration = aws.Bool(true)
 	conf.Type = aws.String("request")
 	conf.ValidUntil = &until
-	conf.LaunchSpecifications = []*ec2.SpotFleetLaunchSpecification {
+	conf.LaunchSpecifications = []*ec2.SpotFleetLaunchSpecification{
 		&spec,
 	}
 
 	req.DryRun = aws.Bool(false)
 	req.SpotFleetRequestConfig = &conf
-	
+
 	return &req
 }
 
@@ -199,7 +199,7 @@ func doLaunch(fleetName string) {
 	}
 
 	sess = session.New()
-	client = ec2.New(sess, &aws.Config { Region: optionRegion })
+	client = ec2.New(sess, &aws.Config{Region: optionRegion})
 
 	req, response = client.RequestSpotFleetRequest(fleetRequest)
 	err = req.Send()
@@ -231,9 +231,9 @@ func Launch(args []string) {
 
 	flags.Parse(args[1:])
 
-	if (len(flags.Args()) < 1) {
+	if len(flags.Args()) < 1 {
 		Error("missing fleet-name operand")
-	} else if (len(flags.Args()) > 1) {
+	} else if len(flags.Args()) > 1 {
 		Error("unexpected operand: %s", flags.Args()[1])
 	}
 
