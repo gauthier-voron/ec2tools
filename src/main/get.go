@@ -268,6 +268,31 @@ func GetUiids(instances *Ec2Selection) []string {
 	return results
 }
 
+func getInstancesProperty(instances *Ec2Selection, property string) []string {
+	if property == "name" {
+		return GetNames(instances)
+	} else if (property == "ip") || (property == "public-ip") {
+		return GetPublicIps(instances)
+	} else if property == "private-ip" {
+		return GetPrivateIps(instances)
+	} else if property == "region" {
+		return GetRegions(instances)
+	} else if property == "user" {
+		return GetUsers(instances)
+	} else if property == "fiid" {
+		return GetFiids(instances)
+	} else if property == "fleet" {
+		return GetFleets(instances)
+	} else if property == "uiid" {
+		return GetUiids(instances)
+	} else {
+		Error("unknown property '%s'", property)
+
+		// Dead code
+		return make([]string, 0)
+	}
+}
+
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var ctx *Context
