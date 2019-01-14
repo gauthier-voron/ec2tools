@@ -27,8 +27,8 @@ type sshContext struct {
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
-var DEFAULT_TIMEOUT int64  = -1
-var DEFAULT_VERBOSE bool   = false
+var DEFAULT_TIMEOUT int64 = -1
+var DEFAULT_VERBOSE bool = false
 
 var optionErrmode *string
 var optionExtmode *string
@@ -75,14 +75,14 @@ Modes:
 `,
 		PROGNAME, DEFAULT_CONTEXT, DEFAULT_ERRMODE, DEFAULT_EXTMODE,
 		DEFAULT_OUTMODE, DEFAULT_TIMEOUT,
-		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE);
+		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
 func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 	var cmd *exec.Cmd
 	var user, dest string
 	var cctx context.Context
-	var sshcmd []string = []string {
+	var sshcmd []string = []string{
 		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
 		"-o", "UserKnownHostsFile=/dev/null",
 	}
@@ -111,7 +111,7 @@ func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 		cmd = exec.Command("ssh", sshcmd...)
 	} else {
 		cctx, _ = context.WithTimeout(context.Background(),
-			time.Duration(*optionTimeout) * time.Second)
+			time.Duration(*optionTimeout)*time.Second)
 		cmd = exec.CommandContext(cctx, "ssh", sshcmd...)
 	}
 
@@ -364,7 +364,7 @@ func Ssh(args []string) {
 	flags.Parse(args[1:])
 	args = flags.Args()
 
-	if (len(args) < 1) {
+	if len(args) < 1 {
 		Error("missing instance-id operand")
 	}
 
