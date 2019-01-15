@@ -101,6 +101,7 @@ func (this *Ec2Index) AddEc2Fleet(id, name, user, region string, size int) (*Ec2
 	fleet.Name = name
 	fleet.User = user
 	fleet.Region = region
+	fleet.Size = size
 	fleet.Instances = make([]*Ec2Instance, 0)
 	fleet.Index = this
 
@@ -147,6 +148,11 @@ func (this *Ec2Fleet) AddEc2Instance(name, publicIp, privateIp string) (*Ec2Inst
 	var instance Ec2Instance
 	var instanceNameDup bool
 	var err Ec2IndexError
+
+	if len(this.Instances) == this.Size {
+		err.message = "Reached maximum size"
+		return nil, &err
+	}
 
 	if this.Index == nil {
 		err.message = "Fleet not linked to an index"
@@ -197,6 +203,7 @@ type ec2fleet struct {
 	Name      string         // storage for Ec2Fleet.Name
 	User      string         // storage for Ec2Fleet.User
 	Region    string         // storage for Ec2Fleet.Region
+	Size      int            // storage for Ec2Fleet.Size
 	Instances []*ec2instance // storage for Ec2Fleet.Instances
 }
 
@@ -254,6 +261,7 @@ func packEc2Fleet(fleet *Ec2Fleet) *ec2fleet {
 	pfleet.Name = fleet.Name
 	pfleet.User = fleet.User
 	pfleet.Region = fleet.Region
+	pfleet.Size = fleet.Size
 	pfleet.Instances = make([]*ec2instance, 0, len(fleet.Instances))
 
 	for _, instance = range fleet.Instances {
@@ -323,6 +331,7 @@ func unpackEc2Fleet(idx *Ec2Index, pfleet *ec2fleet) *Ec2Fleet {
 	fleet.Name = pfleet.Name
 	fleet.User = pfleet.User
 	fleet.Region = pfleet.Region
+	fleet.Size = pfleet.Size
 	fleet.Instances = make([]*Ec2Instance, 0, len(pfleet.Instances))
 	fleet.Index = idx
 
