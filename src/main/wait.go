@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 )
 
 const (
@@ -115,6 +116,25 @@ func validContext(ctx *Ec2Index, fleetSpecs []string) bool {
 		if !validSelection(selection) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func WaitFleets(ctx *Ec2Index, fleetSpecs []string) bool {
+	var elapsedSecs int = 0
+
+	for !validContext(ctx, fleetSpecs) {
+		if waitProcOptionTimeout > 0 {
+			if elapsedSecs >= waitProcOptionTimeout {
+				return false
+			}
+		}
+
+		time.Sleep(1000 * time.Millisecond)
+		elapsedSecs += 1
+
+		UpdateContext(ctx)
 	}
 
 	return true
