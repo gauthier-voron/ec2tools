@@ -6,6 +6,10 @@ EXTLIBS := github.com/aws/aws-sdk-go/aws         \
 
 EXTLIBS_PATH := $(patsubst %, src/%, $(EXTLIBS))
 
+ALL_SOURCES := $(wildcard src/main/*.go)
+
+EXE_SOURCES := $(filter-out %_test.go, $(ALL_SOURCES))
+
 
 default: all
 
@@ -14,15 +18,10 @@ all: ec2tools
 check: ec2tools
 	./runtest.sh
 
-
-ec2tools: src/main/context.go src/main/get.go src/main/help.go \
-          src/main/launch.go src/main/main.go src/main/scp.go src/main/ssh.go \
-          src/main/stop.go src/main/update.go
+ec2tools: $(EXE_SOURCES)
 	GOPATH=$(PWD) go build -v -o $@ $(filter src/main/%.go, $^)
 
-test: src/main/context.go src/main/context_test.go src/main/get.go src/main/help.go \
-          src/main/launch.go src/main/main.go src/main/scp.go src/main/ssh.go \
-          src/main/stop.go src/main/update.go
+test: $(ALL_SOURCES)
 	GOPATH=$(PWD) go test $(filter src/main/%.go, $^)
 
 
