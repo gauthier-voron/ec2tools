@@ -208,7 +208,7 @@ func doLaunch(fleetName string) {
 	}
 
 	ctx.AddEc2Fleet(*response.SpotFleetRequestId, fleetName, *optionUser,
-		*optionRegion)
+		*optionRegion, int(*optionSize))
 
 	StoreEc2Index(*optionContext, ctx)
 }

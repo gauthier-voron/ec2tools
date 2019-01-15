@@ -40,6 +40,8 @@ func Help(args []string) {
 		PrintStopUsage()
 	} else if command == "update" {
 		PrintUpdateUsage()
+	} else if command == "wait" {
+		PrintWaitUsage()
 	} else {
 		Error("invalid command operand: %s", command)
 	}

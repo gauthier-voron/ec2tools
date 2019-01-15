@@ -50,6 +50,7 @@ type Ec2Fleet struct {
 	Name      string         // name of the fleet given by user
 	User      string         // name to use to ssh instances of the fleet
 	Region    string         // ec2 region code for this fleet
+	Size      int            // maximal size of the fleet
 	Instances []*Ec2Instance // instances of this fleet
 	Index     *Ec2Index      // pointer to the index
 }
@@ -85,7 +86,7 @@ func NewEc2Index() *Ec2Index {
 // code.
 // Return an error if the fleet name is already used.
 //
-func (this *Ec2Index) AddEc2Fleet(id, name, user, region string) (*Ec2Fleet, error) {
+func (this *Ec2Index) AddEc2Fleet(id, name, user, region string, size int) (*Ec2Fleet, error) {
 	var fleetNameDup bool
 	var err Ec2IndexError
 	var fleet Ec2Fleet
@@ -100,6 +101,7 @@ func (this *Ec2Index) AddEc2Fleet(id, name, user, region string) (*Ec2Fleet, err
 	fleet.Name = name
 	fleet.User = user
 	fleet.Region = region
+	fleet.Size = size
 	fleet.Instances = make([]*Ec2Instance, 0)
 	fleet.Index = this
 
@@ -146,6 +148,11 @@ func (this *Ec2Fleet) AddEc2Instance(name, publicIp, privateIp string) (*Ec2Inst
 	var instance Ec2Instance
 	var instanceNameDup bool
 	var err Ec2IndexError
+
+	if len(this.Instances) == this.Size {
+		err.message = "Reached maximum size"
+		return nil, &err
+	}
 
 	if this.Index == nil {
 		err.message = "Fleet not linked to an index"
@@ -196,6 +203,7 @@ type ec2fleet struct {
 	Name      string         // storage for Ec2Fleet.Name
 	User      string         // storage for Ec2Fleet.User
 	Region    string         // storage for Ec2Fleet.Region
+	Size      int            // storage for Ec2Fleet.Size
 	Instances []*ec2instance // storage for Ec2Fleet.Instances
 }
 
@@ -253,6 +261,7 @@ func packEc2Fleet(fleet *Ec2Fleet) *ec2fleet {
 	pfleet.Name = fleet.Name
 	pfleet.User = fleet.User
 	pfleet.Region = fleet.Region
+	pfleet.Size = fleet.Size
 	pfleet.Instances = make([]*ec2instance, 0, len(fleet.Instances))
 
 	for _, instance = range fleet.Instances {
@@ -322,6 +331,7 @@ func unpackEc2Fleet(idx *Ec2Index, pfleet *ec2fleet) *Ec2Fleet {
 	fleet.Name = pfleet.Name
 	fleet.User = pfleet.User
 	fleet.Region = pfleet.Region
+	fleet.Size = pfleet.Size
 	fleet.Instances = make([]*Ec2Instance, 0, len(pfleet.Instances))
 	fleet.Index = idx
 
@@ -402,7 +412,8 @@ func StoreEc2Index(path string, idx *Ec2Index) error {
 // This is more convenient to carry across function calls than a plain slice.
 //
 type Ec2Selection struct {
-	Instances []*Ec2Instance
+	Fleets    []*Ec2Fleet    // selected fleets
+	Instances []*Ec2Instance // selected instances
 }
 
 // Apply a regular expression to a slice of string and return a slice
@@ -449,6 +460,8 @@ func filterSearchSpace(searchSpace []string, goal string) []string {
 // The spec can be either a fleet name or a regex.
 // The matching or filtered fleets get all their instances included in the
 // returned selection with no particular order.
+// The matching fleets are included in the selection.Fleet field, even if there
+// are no corresponding instances.
 // If the specification is an ill formed regular expression, return an error.
 //
 func (this *Ec2Index) searchFleetsSpec(regexpOption bool, body string) (*Ec2Selection, error) {
@@ -473,10 +486,13 @@ func (this *Ec2Index) searchFleetsSpec(regexpOption bool, body string) (*Ec2Sele
 		solutionSpace = filterSearchSpace(searchSpace, body)
 	}
 
+	selection.Fleets = make([]*Ec2Fleet, 0, len(solutionSpace))
 	selection.Instances = make([]*Ec2Instance, 0, len(solutionSpace))
 
 	for _, searchItem = range solutionSpace {
 		fleet = this.FleetsByName[searchItem]
+		selection.Fleets = append(selection.Fleets, fleet)
+
 		for _, instance = range fleet.Instances {
 			selection.Instances =
 				append(selection.Instances, instance)
@@ -490,14 +506,18 @@ func (this *Ec2Index) searchFleetsSpec(regexpOption bool, body string) (*Ec2Sele
 // The spec can be either am instance name or a regex.
 // The matching or filtered instances are included in the returned selection
 // with no particular order.
+// All the fleets of the matched instances are stored into selection.Fleets
+// (with no duplicate).
 // If the specification is an ill formed regular expression, return an error.
 //
 func (this *Ec2Index) searchInstancesSpec(regexpOption bool, body string) (*Ec2Selection, error) {
 	var selection Ec2Selection
 	var searchSpace []string = make([]string, 0)
 	var solutionSpace []string
+	var fleetsByName map[string]*Ec2Fleet
 	var searchItem string
 	var instance *Ec2Instance
+	var fleet *Ec2Fleet
 	var err error
 
 	for searchItem = range this.InstancesByName {
@@ -513,11 +533,18 @@ func (this *Ec2Index) searchInstancesSpec(regexpOption bool, body string) (*Ec2S
 		solutionSpace = filterSearchSpace(searchSpace, body)
 	}
 
+	fleetsByName = make(map[string]*Ec2Fleet)
 	selection.Instances = make([]*Ec2Instance, 0, len(solutionSpace))
 
 	for _, searchItem = range solutionSpace {
 		instance = this.InstancesByName[searchItem]
 		selection.Instances = append(selection.Instances, instance)
+		fleetsByName[instance.Fleet.Name] = instance.Fleet
+	}
+
+	selection.Fleets = make([]*Ec2Fleet, 0, len(fleetsByName))
+	for _, fleet = range fleetsByName {
+		selection.Fleets = append(selection.Fleets, fleet)
 	}
 
 	return &selection, nil
@@ -529,6 +556,8 @@ func (this *Ec2Index) searchInstancesSpec(regexpOption bool, body string) (*Ec2S
 // expression.
 // Include all the matching instances in the returned selection ordered by
 // their UniqueIndex.
+// Also include the matching fleets, either matched by a fleet specification
+// or the ones the matched instances belong to.
 // If the specification is an ill formed regular expression, return an error.
 //
 func (this *Ec2Index) searchSpec(fleetOption, regexpOption bool, body string) (*Ec2Selection, error) {
@@ -570,6 +599,7 @@ func (this *Ec2Index) searchSpec(fleetOption, regexpOption bool, body string) (*
 // Parse the given specification and return a selection of the instances in
 // this Ec2Index matching the specification.
 // Sort the selection instances by their UniqueIndex.
+// The selection also contains matched fleets, with no specific order.
 // If the specification is an ill formed regular expression, return an error.
 //
 func (this *Ec2Index) selectSpec(spec string) (*Ec2Selection, error) {
@@ -625,12 +655,16 @@ func (this *Ec2Index) selectSpec(spec string) (*Ec2Selection, error) {
 // If there is more than a specification, their result are concatenated in the
 // result selection, conserving duplicates if there are somes.
 // Inside a specification result, the instances are ordered by UniqueIndex.
+// The selection also contains matched fleets, with no specific order but
+// without duplicates.
 // There is no sortition over the whole result.
 //
 func (this *Ec2Index) Select(specs []string) (*Ec2Selection, error) {
+	var fleetsByName map[string]*Ec2Fleet = make(map[string]*Ec2Fleet)
 	var selection Ec2Selection
 	var instance *Ec2Instance
 	var subsel *Ec2Selection
+	var fleet *Ec2Fleet
 	var spec string
 	var err error
 
@@ -646,6 +680,16 @@ func (this *Ec2Index) Select(specs []string) (*Ec2Selection, error) {
 			selection.Instances =
 				append(selection.Instances, instance)
 		}
+
+		for _, fleet = range subsel.Fleets {
+			fleetsByName[fleet.Name] = fleet
+		}
+	}
+
+	selection.Fleets = make([]*Ec2Fleet, 0, len(fleetsByName))
+
+	for _, fleet = range fleetsByName {
+		selection.Fleets = append(selection.Fleets, fleet)
 	}
 
 	return &selection, nil

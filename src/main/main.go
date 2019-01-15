@@ -85,6 +85,8 @@ func main() {
 		Stop(flag.Args())
 	} else if command == "update" {
 		Update(flag.Args())
+	} else if command == "wait" {
+		Wait(flag.Args())
 	} else {
 		Error("invalid command operand: %s", command)
 	}
