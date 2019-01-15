@@ -26,7 +26,6 @@ var DEFAULT_WAIT_WAIT_FOR string = "ip"
 
 var waitParams waitParameters
 
-
 type processedOptionCount struct {
 	Type   int // NUMBER or PERCENT
 	Number int // integer base value
@@ -35,7 +34,6 @@ type processedOptionCount struct {
 var waitProcOptionCount processedOptionCount
 
 var waitProcOptionTimeout int
-
 
 func PrintWaitUsage() {
 	fmt.Printf(`Usage: %s wait [options] [<fleet-spec...>]
