@@ -50,6 +50,7 @@ type Ec2Fleet struct {
 	Name      string         // name of the fleet given by user
 	User      string         // name to use to ssh instances of the fleet
 	Region    string         // ec2 region code for this fleet
+	Size      int            // maximal size of the fleet
 	Instances []*Ec2Instance // instances of this fleet
 	Index     *Ec2Index      // pointer to the index
 }
@@ -85,7 +86,7 @@ func NewEc2Index() *Ec2Index {
 // code.
 // Return an error if the fleet name is already used.
 //
-func (this *Ec2Index) AddEc2Fleet(id, name, user, region string) (*Ec2Fleet, error) {
+func (this *Ec2Index) AddEc2Fleet(id, name, user, region string, size int) (*Ec2Fleet, error) {
 	var fleetNameDup bool
 	var err Ec2IndexError
 	var fleet Ec2Fleet
