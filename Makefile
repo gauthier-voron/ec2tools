@@ -12,14 +12,7 @@ default: all
 all: ec2tools
 
 check: ec2tools
-	./ec2tools launch --price=0.035 --region=ap-southeast-2 --size=2 \
-                   --key=gauthier sydney
-	sleep 30
-	./ec2tools get --update instances
-	sleep 30
-	./ec2tools scp ec2tools
-	./ec2tools ssh ls -la
-	./ec2tools stop
+	./runtest.sh
 
 
 ec2tools: src/main/context.go src/main/get.go src/main/help.go \
