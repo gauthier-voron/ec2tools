@@ -9,6 +9,16 @@ const (
 	PROCESSED_OPTION_COUNT_TYPE_PERCENT = iota
 )
 
+type waitParameters struct {
+	OptionContext *string
+	OptionCount   *string
+	OptionTimeout *string
+	OptionWaitFor *string
+}
+
+var waitParams waitParameters
+
+
 type processedOptionCount struct {
 	Type   int // NUMBER or PERCENT
 	Number int // integer base value
