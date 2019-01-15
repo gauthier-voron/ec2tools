@@ -63,5 +63,46 @@ func computeRequiredCount(maximumCount int) int {
 	}
 }
 
+func processOptionCount() {
+	var mustEnd = false
+	var hasStarted = false
+	var number int
+	var c rune
+
+	waitProcOptionCount.Type = PROCESSED_OPTION_COUNT_TYPE_NUMBER
+
+	for _, c = range *waitParams.OptionCount {
+		if mustEnd {
+			Error("invalid value for option --count: '%s'",
+				*waitParams.OptionCount)
+		}
+
+		if (c >= '0') && (c <= '9') {
+			number *= 10
+			number += int(c) - '0'
+			hasStarted = true
+		} else if c == '%' {
+			waitProcOptionCount.Type =
+				PROCESSED_OPTION_COUNT_TYPE_PERCENT
+			mustEnd = true
+
+			if number > 100 {
+				Error("invalid value for option --count: '%s'",
+					*waitParams.OptionCount)
+			}
+		} else {
+			Error("invalid value for option --count: '%s'",
+				*waitParams.OptionCount)
+		}
+	}
+
+	if !hasStarted {
+		Error("invalid value for option --count: '%s'",
+			*waitParams.OptionCount)
+	}
+
+	waitProcOptionCount.Number = number
+}
+
 func Wait(args []string) {
 }
