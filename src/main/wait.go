@@ -26,6 +26,9 @@ type processedOptionCount struct {
 
 var waitProcOptionCount processedOptionCount
 
+var waitProcOptionTimeout int
+
+
 func PrintWaitUsage() {
 	fmt.Printf(`Usage: %s wait [options] [<fleet-spec...>]
 
@@ -102,6 +105,25 @@ func processOptionCount() {
 	}
 
 	waitProcOptionCount.Number = number
+}
+
+func processOptionTimeout() {
+	var secs int64
+
+	if *waitParams.OptionTimeout == "" {
+		waitProcOptionTimeout = 0
+		return
+	}
+
+	// Thanks to launch.go
+	secs = timespecToSec(*waitParams.OptionTimeout)
+
+	if secs < 0 {
+		Error("invalid value for option --timeout: '%s'",
+			*waitParams.OptionTimeout)
+	}
+
+	waitProcOptionTimeout = int(secs)
 }
 
 func Wait(args []string) {
