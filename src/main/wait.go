@@ -4,6 +4,18 @@ import (
 	"fmt"
 )
 
+const (
+	PROCESSED_OPTION_COUNT_TYPE_NUMBER  = iota
+	PROCESSED_OPTION_COUNT_TYPE_PERCENT = iota
+)
+
+type processedOptionCount struct {
+	Type   int // NUMBER or PERCENT
+	Number int // integer base value
+}
+
+var waitProcOptionCount processedOptionCount
+
 func PrintWaitUsage() {
 	fmt.Printf(`Usage: %s wait [options] [<fleet-spec...>]
 
@@ -31,6 +43,14 @@ Options:
                               reachable via ssh.
 `,
 		PROGNAME, DEFAULT_CONTEXT)
+}
+
+func computeRequiredCount(maximumCount int) int {
+	if waitProcOptionCount.Type == PROCESSED_OPTION_COUNT_TYPE_NUMBER {
+		return waitProcOptionCount.Number
+	} else {
+		return (maximumCount * waitProcOptionCount.Number) / 100
+	}
 }
 
 func Wait(args []string) {
