@@ -148,6 +148,10 @@ func probeInstances(list []*ec2.ActiveInstance, subjob *updateSubjob) error {
 	var err error
 	var idx int
 
+	if len(list) == 0 {
+		return nil
+	}
+
 	input.InstanceIds = make([]*string, len(list))
 
 	for idx, instance = range list {
