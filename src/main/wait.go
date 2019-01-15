@@ -1,7 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -16,6 +18,11 @@ type waitParameters struct {
 	OptionTimeout *string
 	OptionWaitFor *string
 }
+
+var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
+var DEFAULT_WAIT_COUNT string = "100%"
+var DEFAULT_WAIT_TIMEOUT string = ""
+var DEFAULT_WAIT_WAIT_FOR string = "ip"
 
 var waitParams waitParameters
 
@@ -201,4 +208,42 @@ func processOptionTimeout() {
 }
 
 func Wait(args []string) {
+	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
+	var fleetSpecs []string
+	var fleetSpec string
+	var ctx *Ec2Index
+	var success bool
+	var err error
+
+	waitParams.OptionContext = flags.String("context", DEFAULT_WAIT_CONTEXT, "")
+	waitParams.OptionCount = flags.String("count", DEFAULT_WAIT_COUNT, "")
+	waitParams.OptionTimeout = flags.String("timeout", DEFAULT_WAIT_TIMEOUT, "")
+	waitParams.OptionWaitFor = flags.String("wait-for", DEFAULT_WAIT_WAIT_FOR, "")
+
+	flags.Parse(args[1:])
+
+	processOptionCount()
+	processOptionTimeout()
+
+	if len(flags.Args()) == 0 {
+		fleetSpecs = []string{"@//"}
+	} else {
+		fleetSpecs = make([]string, 0, len(flags.Args()))
+		for _, fleetSpec = range flags.Args() {
+			fleetSpecs = append(fleetSpecs, "@"+fleetSpec)
+		}
+	}
+
+	ctx, err = LoadEc2Index(*waitParams.OptionContext)
+	if err != nil {
+		Error("no context: %s", *waitParams.OptionContext)
+	}
+
+	success = WaitFleets(ctx, fleetSpecs)
+
+	StoreEc2Index(*waitParams.OptionContext, ctx)
+
+	if !success {
+		os.Exit(1)
+	}
 }
