@@ -66,6 +66,60 @@ func computeRequiredCount(maximumCount int) int {
 	}
 }
 
+func validInstance(instance *Ec2Instance) bool {
+	if *waitParams.OptionWaitFor == "ip" {
+		return instance.PublicIp != ""
+	} else if *waitParams.OptionWaitFor == "ssh" {
+		Error("not yet implemented value for option --wait-for: 'ssh'")
+		return false
+	} else {
+		Error("invalid value for option --wait-for: '%s'",
+			*waitParams.OptionWaitFor)
+		return false
+	}
+}
+
+func validSelection(selection *Ec2Selection) bool {
+	var validCount, requiredCount int
+	var instance *Ec2Instance
+	var maximumCount int = 0
+	var fleet *Ec2Fleet
+
+	for _, fleet = range selection.Fleets {
+		maximumCount += fleet.Size
+	}
+
+	requiredCount = computeRequiredCount(maximumCount)
+	validCount = 0
+
+	for _, instance = range selection.Instances {
+		if validInstance(instance) {
+			validCount += 1
+		}
+	}
+
+	return (validCount >= requiredCount)
+}
+
+func validContext(ctx *Ec2Index, fleetSpecs []string) bool {
+	var selection *Ec2Selection
+	var fleetSpec string
+	var err error
+
+	for _, fleetSpec = range fleetSpecs {
+		selection, err = ctx.Select([]string{fleetSpec})
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
+		}
+
+		if !validSelection(selection) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func processOptionCount() {
 	var mustEnd = false
 	var hasStarted = false
