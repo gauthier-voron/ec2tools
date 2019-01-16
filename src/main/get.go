@@ -402,11 +402,11 @@ func getInstancesProperty(instances *Ec2Selection, property string) ([]string, [
 
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
+	var results, sortkeys, specs, properties []string
 	var instances *Ec2Selection
-	var results []string
-	var sortkeys []string
+	var hasSpecs bool
+	var arg, result string
 	var idx *Ec2Index
-	var result string
 	var err error
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
@@ -420,7 +420,30 @@ func Get(args []string) {
 	args = flags.Args()
 
 	if len(args) < 1 {
-		Error("missing type operand")
+		Error("missing property operand")
+	}
+
+	hasSpecs = false
+	specs = []string{"//"}
+	properties = make([]string, 0)
+
+	for _, arg = range args {
+		if (arg == "--") && !hasSpecs {
+			hasSpecs = true
+			specs = properties
+			properties = make([]string, 0)
+			continue
+		}
+
+		properties = append(properties, arg)
+	}
+
+	if len(properties) < 1 {
+		Error("missing property operand")
+	} else if len(properties) > 1 {
+		Error("too many property operands")
+	} else if len(specs) < 1 {
+		Error("missing instance-spec operand")
 	}
 
 	if *optionSort {
@@ -442,15 +465,14 @@ func Get(args []string) {
 	}
 
 	if args[0] == "fleets" {
+		if hasSpecs {
+			Error("unexpected instance-spec operand")
+		}
 		results = GetAllFleets(idx)
 	} else {
-		if len(args) == 1 {
-			instances, _ = idx.Select([]string{"//"})
-		} else {
-			instances, err = idx.Select(args[1:])
-			if err != nil {
-				Error("invalid specification: %s", err.Error())
-			}
+		instances, err = idx.Select(specs)
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
 		}
 
 		if *optionUniqueInstances {
@@ -464,7 +486,7 @@ func Get(args []string) {
 			sortInstances(instances, sortkeys)
 		}
 
-		results, _ = getInstancesProperty(instances, args[0])
+		results, _ = getInstancesProperty(instances, properties[0])
 	}
 
 	if *optionUniqueResults {
