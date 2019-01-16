@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-#  Run test scripts located in 'test'. Each script is a validation test for
-#  ec2tools. A script with an exit code of 0 is successful, otherwise it is a
-#  failure.
+#  Run test scripts located in 'test' or specified on the command line. Each
+#  script is a validation test for ec2tools. A script with an exit code of 0
+#  is successful, otherwise it is a failure.
 #
 
 
@@ -251,15 +251,45 @@ account_ret() {
     __NTEST_TOTAL=$(( __NTEST_TOTAL + 1 ))
 }
 
+# Run completely a test and account for its result.
+# Redirect every test script outputs in a log file. If the test is successful,
+# do not print garbage.
+# Set a timeout for each script to not hang indefinitely.
+# Be sure that every ec2 instance has been stopped before to go to the next
+# test.
+#
+run_test() {
+    local script="$1" ; shift
+    local logfile pidfile pid ret
+
+    logfile=$(mktemp --suffix='.log' 'test-log.XXXXXXXXXX')
+    pidfile=$(mktemp --suffix='.pid' 'test-pid.XXXXXXXXXX')
+
+    print_test_running "$script" ''
+
+    run_script "$script" "$logfile" "$pidfile"
+    pid=$(cat "$pidfile")
+    rm "$pidfile"
+
+    wait_script "$pid" 30 "$script"
+    ret=$?
+
+    ec2tools stop 2> /dev/null
+
+    account_ret "$script" $ret "$logfile"
+
+    rm "$logfile"
+}
+
 
 # Print a usage message for this script on stdout.
 #
 usage() {
-    printf "Usage: %s [options]\n" "$0"
+    printf "Usage: %s [options] [<test-scripts...>]\n" "$0"
     echo
-    printf "Run test scripts located in 'test'. Each script is a validation test for\n"
-    printf "ec2tools. A script with an exit code of 0 is successful, otherwise it is a\n"
-    printf "failure.\n"
+    printf "Run test scripts located in 'test' or specified on the command line. Each\n"
+    printf "script is a validation test for ec2tools. A script with an exit code of 0 is\n"
+    printf "successful, otherwise it is a failure.\n"
     echo
     printf "Options:\n"
     printf "  -c, --color <yes|no|auto>             use colored output\n"
@@ -319,32 +349,22 @@ fi
 
 
 # Step 3: Run the tests
-# Redirect every test script outputs in a log file. If the test is successful,
-# do not print garbage.
-# Set a timeout for each script to not hang indefinitely.
-# Be sure that every ec2 instance has been stopped before to go to the next
-# test.
+# If there are some tests specified then run them, otherwise run the executable
+# files inside the 'test/' directory.
 #
 
-for script in test/* ; do
-    logfile=$(mktemp --suffix='.log' 'test-log.XXXXXXXXXX')
-    pidfile=$(mktemp --suffix='.pid' 'test-pid.XXXXXXXXXX')
-
-    print_test_running "$script" ''
-
-    run_script "$script" "$logfile" "$pidfile"
-    pid=$(cat "$pidfile")
-    rm "$pidfile"
-
-    wait_script "$pid" 30 "$script"
-    ret=$?
-
-    ec2tools stop 2> /dev/null
-
-    account_ret "$script" $ret "$logfile"
-
-    rm "$logfile"
-done
+if [ $# -eq 0 ] ; then
+    for script in test/* ; do
+	if [ ! -x "$script" ] ; then
+	    continue
+	fi
+	run_test "$script"
+    done
+else
+    for script in "$@" ; do
+	run_test "$script"
+    done
+fi
 
 
 # Step 4: Print the test summary
