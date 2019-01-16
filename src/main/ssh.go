@@ -28,6 +28,11 @@ type ReaderTransmitter interface {
 	Transmit(to *os.File)
 }
 
+type ReaderTransmitterAllPrefix struct {
+	Instances []*Ec2Instance
+	Readers   []io.Reader
+}
+
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
@@ -121,6 +126,61 @@ func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 
 	return cmd
 }
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Transmitters related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func NewReaderTransmitterAllPrefix(instances *Ec2Selection,
+	readers []io.Reader) *ReaderTransmitterAllPrefix {
+	var ret ReaderTransmitterAllPrefix
+
+	ret.Instances = instances.Instances
+	ret.Readers = readers
+
+	return &ret
+}
+
+func (this *ReaderTransmitterAllPrefix) transmitInstance(id int, to *os.File) {
+	var reader *bufio.Reader = bufio.NewReader(this.Readers[id])
+	var instance *Ec2Instance = this.Instances[id]
+	var bufline string
+	var line []byte
+	var err error
+
+	for {
+		line, err = reader.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+
+		bufline = fmt.Sprintf("[%s] %s", instance.Name, string(line))
+		_, err = to.WriteString(bufline)
+		if err != nil {
+			break
+		}
+	}
+}
+
+func (this *ReaderTransmitterAllPrefix) Transmit(to *os.File) {
+	var done chan bool = make(chan bool)
+	var idx int
+
+	for idx = range this.Instances {
+		go func(i int) {
+			this.transmitInstance(i, to)
+			done <- true
+		}(idx)
+	}
+
+	for _ = range this.Instances {
+		<-done
+	}
+
+	close(done)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func taskTransmitPrefix(instanceId string, from *io.ReadCloser, to *os.File) {
 	var reader *bufio.Reader = bufio.NewReader(*from)
