@@ -271,7 +271,7 @@ run_test() {
     pid=$(cat "$pidfile")
     rm "$pidfile"
 
-    wait_script "$pid" 30 "$script"
+    wait_script "$pid" 90 "$script"
     ret=$?
 
     ec2tools stop 2> /dev/null

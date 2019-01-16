@@ -24,6 +24,20 @@ type sshContext struct {
 	instances map[string]*sshInstanceContext
 }
 
+type ReaderTransmitter interface {
+	Transmit(to *os.File)
+}
+
+type ReaderTransmitterAllPrefix struct {
+	Instances []*Ec2Instance
+	Readers   []io.Reader
+}
+
+type ReaderTransmitterMergeParallel struct {
+	Instances []*Ec2Instance
+	Readers   []io.Reader
+}
+
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
@@ -118,8 +132,23 @@ func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 	return cmd
 }
 
-func taskTransmitPrefix(instanceId string, from *io.ReadCloser, to *os.File) {
-	var reader *bufio.Reader = bufio.NewReader(*from)
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Transmitters related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func NewReaderTransmitterAllPrefix(instances *Ec2Selection,
+	readers []io.Reader) *ReaderTransmitterAllPrefix {
+	var ret ReaderTransmitterAllPrefix
+
+	ret.Instances = instances.Instances
+	ret.Readers = readers
+
+	return &ret
+}
+
+func (this *ReaderTransmitterAllPrefix) transmitInstance(id int, to *os.File) {
+	var reader *bufio.Reader = bufio.NewReader(this.Readers[id])
+	var instance *Ec2Instance = this.Instances[id]
 	var bufline string
 	var line []byte
 	var err error
@@ -130,7 +159,7 @@ func taskTransmitPrefix(instanceId string, from *io.ReadCloser, to *os.File) {
 			break
 		}
 
-		bufline = fmt.Sprintf("[%s] %s", instanceId, string(line))
+		bufline = fmt.Sprintf("[%s] %s", instance.Name, string(line))
 		_, err = to.WriteString(bufline)
 		if err != nil {
 			break
@@ -138,83 +167,95 @@ func taskTransmitPrefix(instanceId string, from *io.ReadCloser, to *os.File) {
 	}
 }
 
-func transmitAllPrefix(instances *Ec2Selection, froms []io.ReadCloser, to *os.File) {
-	var instance *Ec2Instance
+func (this *ReaderTransmitterAllPrefix) Transmit(to *os.File) {
+	var done chan bool = make(chan bool)
 	var idx int
 
-	for idx, instance = range instances.Instances {
-		go taskTransmitPrefix(instance.Name, &froms[idx], to)
+	for idx = range this.Instances {
+		go func(i int) {
+			this.transmitInstance(i, to)
+			done <- true
+		}(idx)
+	}
+
+	for _ = range this.Instances {
+		<-done
+	}
+
+	close(done)
+}
+
+func NewReaderTransmitterMergeParallel(readers []io.Reader) *ReaderTransmitterMergeParallel {
+	var ret ReaderTransmitterMergeParallel
+
+	ret.Readers = readers
+
+	return &ret
+}
+
+func (this *ReaderTransmitterMergeParallel) computeFormat() string {
+	var width, buffer int
+	var format string
+
+	width = 1
+	buffer = len(this.Readers)
+
+	for buffer >= 10 {
+		width += 1
+		buffer /= 10
+	}
+
+	format = fmt.Sprintf("%s[%%%dd/%%%dd] %%s", width, width)
+	return format
+}
+
+func (this *ReaderTransmitterMergeParallel) transmitFormatted(lines []string,
+	to *os.File) {
+	var packedLines map[string]int = make(map[string]int)
+	var line, bufline, format string
+	var count, max int
+
+	for _, line = range lines {
+		packedLines[line] += 1
+	}
+
+	format = this.computeFormat()
+
+	max = len(lines)
+	for line, count = range packedLines {
+		if count == max {
+			bufline = fmt.Sprintf(format, "*", count, max, line)
+		} else {
+			bufline = fmt.Sprintf(format, " ", count, max, line)
+		}
+
+		to.WriteString(bufline)
 	}
 }
 
-func taskChannelLines(from *io.ReadCloser, chn chan string) {
-	var reader *bufio.Reader = bufio.NewReader(*from)
+func (this *ReaderTransmitterMergeParallel) Transmit(to *os.File) {
+	var bufreader *bufio.Reader
+	var reader io.Reader
+	var lines []string
 	var line []byte
 	var err error
 
 	for {
-		line, err = reader.ReadBytes('\n')
-		if err != nil {
-			break
-		}
+		lines = make([]string, 0)
 
-		chn <- string(line)
-	}
-
-	close(chn)
-}
-
-func transmitMergeParallel(froms []io.ReadCloser, to *os.File) {
-	var chns []chan string = make([]chan string, len(froms))
-	var bufline, line, totalFormat, partialFormat string
-	var mergedLines map[string]int
-	var count, idx, width, tmp int
-	var alive bool
-
-	width = 1
-	tmp = len(froms)
-	for tmp >= 10 {
-		width += 1
-		tmp /= 10
-	}
-
-	totalFormat = fmt.Sprintf("*[%%%dd/%%d] %%s", width)
-	partialFormat = fmt.Sprintf(" [%%%dd/%%d] %%s", width)
-
-	for idx, _ = range froms {
-		chns[idx] = make(chan string)
-		go taskChannelLines(&froms[idx], chns[idx])
-	}
-
-	for {
-		mergedLines = make(map[string]int)
-		count = 0
-
-		for idx, _ = range froms {
-			line, alive = <-chns[idx]
-
-			if alive {
-				mergedLines[line] += 1
-				count += 1
+		for _, reader = range this.Readers {
+			bufreader = bufio.NewReader(reader)
+			line, err = bufreader.ReadBytes('\n')
+			if err == nil {
+				lines = append(lines, string(line))
 			}
 		}
 
-		if count == 0 {
-			break
-		}
-
-		for line = range mergedLines {
-			if mergedLines[line] == count {
-				bufline = fmt.Sprintf(totalFormat,
-					mergedLines[line], count, line)
-			} else {
-				bufline = fmt.Sprintf(partialFormat,
-					mergedLines[line], count, line)
-			}
-			to.WriteString(bufline)
-		}
+		this.transmitFormatted(lines, to)
 	}
 }
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func taskTransmitStdin(stdins []io.WriteCloser) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
@@ -270,10 +311,11 @@ func collectExitEagerGreatest(cmds []*exec.Cmd) int {
 
 func doSsh(instances *Ec2Selection, command []string) {
 	var length int = len(instances.Instances)
-	var stdouts []io.ReadCloser = make([]io.ReadCloser, length)
-	var stderrs []io.ReadCloser = make([]io.ReadCloser, length)
+	var stdouts []io.Reader = make([]io.Reader, length)
+	var stderrs []io.Reader = make([]io.Reader, length)
 	var stdins []io.WriteCloser = make([]io.WriteCloser, length)
 	var cmds []*exec.Cmd = make([]*exec.Cmd, length)
+	var outTransmit, errTransmit ReaderTransmitter
 	var instance *Ec2Instance
 	var err error
 	var idx int
@@ -305,21 +347,23 @@ func doSsh(instances *Ec2Selection, command []string) {
 	}
 
 	if *optionOutmode == "all-prefix" {
-		transmitAllPrefix(instances, stdouts, os.Stdout)
+		outTransmit = NewReaderTransmitterAllPrefix(instances, stdouts)
 	} else if *optionOutmode == "merge-parallel" {
-		transmitMergeParallel(stdouts, os.Stdout)
+		outTransmit = NewReaderTransmitterMergeParallel(stdouts)
 	} else {
 		Error("unknown output mode: '%s'", *optionOutmode)
 	}
 
 	if *optionErrmode == "all-prefix" {
-		transmitAllPrefix(instances, stderrs, os.Stderr)
+		errTransmit = NewReaderTransmitterAllPrefix(instances, stderrs)
 	} else if *optionErrmode == "merge-parallel" {
-		transmitMergeParallel(stderrs, os.Stderr)
+		errTransmit = NewReaderTransmitterMergeParallel(stderrs)
 	} else {
 		Error("unknown errput mode: '%s'", *optionErrmode)
 	}
 
+	go outTransmit.Transmit(os.Stdout)
+	go errTransmit.Transmit(os.Stderr)
 	go taskTransmitStdin(stdins)
 
 	os.Exit(collectExitEagerGreatest(cmds))
