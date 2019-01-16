@@ -7,12 +7,14 @@ import (
 	"strconv"
 )
 
+var DEFAULT_DEFINED bool = false
 var DEFAULT_SORT bool = false
 var DEFAULT_SORT_BY string = ""
 var DEFAULT_UNIQUE_INSTANCES bool = false
 var DEFAULT_UNIQUE_RESULTS bool = false
 var DEFAULT_UPDATE bool = false
 
+var optionDefined *bool
 var optionSort *bool
 var optionSortBy *string
 var optionUniqueInstances *bool
@@ -21,7 +23,7 @@ var optionUpdate *bool
 
 func PrintGetUsage() {
 	fmt.Printf(`Usage: %s get [options] fleets
-       %s get [options] <property> <instances-specification...>
+       %s get [options] [<instances-specification...> --] <property>
 
 Print information about fleets and instances.
 The first form print a list of the fleet names launched and not yet stopped in
@@ -63,6 +65,8 @@ Instance specification:
 
 Options:
   --context <path>            path of the context file (default: '%s')
+
+  --defined                   only print defined properties
 
   --sort                      sort instances by their uiid before to print
                               their properties (shortcut for '--sort-by uiid')
@@ -336,47 +340,81 @@ func GetUiids(instances *Ec2Selection) []string {
 	return results
 }
 
+func GetAttributes(instances *Ec2Selection, name string) ([]string, []bool) {
+	var sresults []string = make([]string, 0, len(instances.Instances))
+	var bresults []bool = make([]bool, 0, len(instances.Instances))
+	var instance *Ec2Instance
+	var value string
+	var found bool
+
+	for _, instance = range instances.Instances {
+		value, found = instance.Attributes[name]
+
+		if found {
+			sresults = append(sresults, value)
+		} else {
+			sresults = append(sresults, "")
+		}
+
+		bresults = append(bresults, found)
+	}
+
+	return sresults, bresults
+}
+
 // Return a slice containing the property value of each instance of the given
 // Ec2Selection, given this property name as a string.
 // The string values appear in the same order than the instances do.
 // If their are duplicate instances in the given Ec2Selection, there are
 // duplicate string values in the returned slice as well.
 //
-func getInstancesProperty(instances *Ec2Selection, property string) []string {
-	if property == "name" {
-		return GetNames(instances)
-	} else if (property == "ip") || (property == "public-ip") {
-		return GetPublicIps(instances)
-	} else if property == "private-ip" {
-		return GetPrivateIps(instances)
-	} else if property == "region" {
-		return GetRegions(instances)
-	} else if property == "user" {
-		return GetUsers(instances)
-	} else if property == "fiid" {
-		return GetFiids(instances)
-	} else if property == "fleet" {
-		return GetFleets(instances)
-	} else if property == "uiid" {
-		return GetUiids(instances)
-	} else {
-		Error("unknown property '%s'", property)
+func getInstancesProperty(instances *Ec2Selection, property string) ([]string, []bool) {
+	var sresults []string
+	var bresults []bool
+	var idx int
 
-		// Dead code
-		return make([]string, 0)
+	if property == "name" {
+		sresults = GetNames(instances)
+	} else if (property == "ip") || (property == "public-ip") {
+		sresults = GetPublicIps(instances)
+	} else if property == "private-ip" {
+		sresults = GetPrivateIps(instances)
+	} else if property == "region" {
+		sresults = GetRegions(instances)
+	} else if property == "user" {
+		sresults = GetUsers(instances)
+	} else if property == "fiid" {
+		sresults = GetFiids(instances)
+	} else if property == "fleet" {
+		sresults = GetFleets(instances)
+	} else if property == "uiid" {
+		sresults = GetUiids(instances)
+	} else {
+		return GetAttributes(instances, property)
 	}
+
+	bresults = make([]bool, len(sresults))
+
+	for idx, _ = range sresults {
+		bresults[idx] = true
+	}
+
+	return sresults, bresults
 }
 
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
+	var results, sortkeys, specs, properties, defresults []string
 	var instances *Ec2Selection
-	var results []string
-	var sortkeys []string
+	var hasSpecs, defined bool
+	var arg, result string
+	var defineds []bool
 	var idx *Ec2Index
-	var result string
 	var err error
+	var i int
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
+	optionDefined = flags.Bool("defined", DEFAULT_DEFINED, "")
 	optionSort = flags.Bool("sort", DEFAULT_SORT, "")
 	optionSortBy = flags.String("sort-by", DEFAULT_SORT_BY, "")
 	optionUniqueInstances = flags.Bool("unique-instances", DEFAULT_UNIQUE_INSTANCES, "")
@@ -387,7 +425,30 @@ func Get(args []string) {
 	args = flags.Args()
 
 	if len(args) < 1 {
-		Error("missing type operand")
+		Error("missing property operand")
+	}
+
+	hasSpecs = false
+	specs = []string{"//"}
+	properties = make([]string, 0)
+
+	for _, arg = range args {
+		if (arg == "--") && !hasSpecs {
+			hasSpecs = true
+			specs = properties
+			properties = make([]string, 0)
+			continue
+		}
+
+		properties = append(properties, arg)
+	}
+
+	if len(properties) < 1 {
+		Error("missing property operand")
+	} else if len(properties) > 1 {
+		Error("too many property operands")
+	} else if len(specs) < 1 {
+		Error("missing instance-spec operand")
 	}
 
 	if *optionSort {
@@ -409,15 +470,14 @@ func Get(args []string) {
 	}
 
 	if args[0] == "fleets" {
+		if hasSpecs {
+			Error("unexpected instance-spec operand")
+		}
 		results = GetAllFleets(idx)
 	} else {
-		if len(args) == 1 {
-			instances, _ = idx.Select([]string{"//"})
-		} else {
-			instances, err = idx.Select(args[1:])
-			if err != nil {
-				Error("invalid specification: %s", err.Error())
-			}
+		instances, err = idx.Select(specs)
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
 		}
 
 		if *optionUniqueInstances {
@@ -425,13 +485,24 @@ func Get(args []string) {
 		}
 
 		if *optionSortBy != "" {
-			sortkeys = getInstancesProperty(instances,
+			sortkeys, _ = getInstancesProperty(instances,
 				*optionSortBy)
 
 			sortInstances(instances, sortkeys)
 		}
 
-		results = getInstancesProperty(instances, args[0])
+		results, defineds = getInstancesProperty(instances, properties[0])
+
+		if *optionDefined {
+			defresults = make([]string, 0)
+			for i, defined = range defineds {
+				if defined {
+					defresults =
+						append(defresults, results[i])
+				}
+			}
+			results = defresults
+		}
 	}
 
 	if *optionUniqueResults {

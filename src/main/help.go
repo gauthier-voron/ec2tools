@@ -34,6 +34,8 @@ func Help(args []string) {
 		PrintLaunchUsage()
 	} else if command == "scp" {
 		PrintScpUsage()
+	} else if command == "set" {
+		PrintSetUsage()
 	} else if command == "ssh" {
 		PrintSshUsage()
 	} else if command == "stop" {

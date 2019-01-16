@@ -79,6 +79,8 @@ func main() {
 		Launch(flag.Args())
 	} else if command == "scp" {
 		Scp(flag.Args())
+	} else if command == "set" {
+		Set(flag.Args())
 	} else if command == "ssh" {
 		Ssh(flag.Args())
 	} else if command == "stop" {
