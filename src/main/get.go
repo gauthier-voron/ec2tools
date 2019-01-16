@@ -7,12 +7,14 @@ import (
 	"strconv"
 )
 
+var DEFAULT_DEFINED bool = false
 var DEFAULT_SORT bool = false
 var DEFAULT_SORT_BY string = ""
 var DEFAULT_UNIQUE_INSTANCES bool = false
 var DEFAULT_UNIQUE_RESULTS bool = false
 var DEFAULT_UPDATE bool = false
 
+var optionDefined *bool
 var optionSort *bool
 var optionSortBy *string
 var optionUniqueInstances *bool
@@ -402,14 +404,17 @@ func getInstancesProperty(instances *Ec2Selection, property string) ([]string, [
 
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var results, sortkeys, specs, properties []string
+	var results, sortkeys, specs, properties, defresults []string
 	var instances *Ec2Selection
-	var hasSpecs bool
+	var hasSpecs, defined bool
 	var arg, result string
+	var defineds []bool
 	var idx *Ec2Index
 	var err error
+	var i int
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
+	optionDefined = flags.Bool("defined", DEFAULT_DEFINED, "")
 	optionSort = flags.Bool("sort", DEFAULT_SORT, "")
 	optionSortBy = flags.String("sort-by", DEFAULT_SORT_BY, "")
 	optionUniqueInstances = flags.Bool("unique-instances", DEFAULT_UNIQUE_INSTANCES, "")
@@ -486,7 +491,18 @@ func Get(args []string) {
 			sortInstances(instances, sortkeys)
 		}
 
-		results, _ = getInstancesProperty(instances, properties[0])
+		results, defineds = getInstancesProperty(instances, properties[0])
+
+		if *optionDefined {
+			defresults = make([]string, 0)
+			for i, defined = range defineds {
+				if defined {
+					defresults =
+						append(defresults, results[i])
+				}
+			}
+			results = defresults
+		}
 	}
 
 	if *optionUniqueResults {
