@@ -24,6 +24,10 @@ type sshContext struct {
 	instances map[string]*sshInstanceContext
 }
 
+type ReaderTransmitter interface {
+	Transmit(to *os.File)
+}
+
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
