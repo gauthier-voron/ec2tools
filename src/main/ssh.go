@@ -409,10 +409,11 @@ func collectExitEagerGreatest(cmds []*exec.Cmd) int {
 
 func doSsh(instances *Ec2Selection, command []string) {
 	var length int = len(instances.Instances)
-	var stdouts []io.ReadCloser = make([]io.ReadCloser, length)
-	var stderrs []io.ReadCloser = make([]io.ReadCloser, length)
+	var stdouts []io.Reader = make([]io.Reader, length)
+	var stderrs []io.Reader = make([]io.Reader, length)
 	var stdins []io.WriteCloser = make([]io.WriteCloser, length)
 	var cmds []*exec.Cmd = make([]*exec.Cmd, length)
+	var outTransmit, errTransmit ReaderTransmitter
 	var instance *Ec2Instance
 	var err error
 	var idx int
@@ -444,21 +445,23 @@ func doSsh(instances *Ec2Selection, command []string) {
 	}
 
 	if *optionOutmode == "all-prefix" {
-		transmitAllPrefix(instances, stdouts, os.Stdout)
+		outTransmit = NewReaderTransmitterAllPrefix(instances, stdouts)
 	} else if *optionOutmode == "merge-parallel" {
-		transmitMergeParallel(stdouts, os.Stdout)
+		outTransmit = NewReaderTransmitterMergeParallel(stdouts)
 	} else {
 		Error("unknown output mode: '%s'", *optionOutmode)
 	}
 
 	if *optionErrmode == "all-prefix" {
-		transmitAllPrefix(instances, stderrs, os.Stderr)
+		errTransmit = NewReaderTransmitterAllPrefix(instances, stderrs)
 	} else if *optionErrmode == "merge-parallel" {
-		transmitMergeParallel(stderrs, os.Stderr)
+		errTransmit = NewReaderTransmitterMergeParallel(stderrs)
 	} else {
 		Error("unknown errput mode: '%s'", *optionErrmode)
 	}
 
+	go outTransmit.Transmit(os.Stdout)
+	go errTransmit.Transmit(os.Stderr)
 	go taskTransmitStdin(stdins)
 
 	os.Exit(collectExitEagerGreatest(cmds))
