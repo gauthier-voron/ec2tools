@@ -338,35 +338,66 @@ func GetUiids(instances *Ec2Selection) []string {
 	return results
 }
 
+func GetAttributes(instances *Ec2Selection, name string) ([]string, []bool) {
+	var sresults []string = make([]string, 0, len(instances.Instances))
+	var bresults []bool = make([]bool, 0, len(instances.Instances))
+	var instance *Ec2Instance
+	var value string
+	var found bool
+
+	for _, instance = range instances.Instances {
+		value, found = instance.Attributes[name]
+
+		if found {
+			sresults = append(sresults, value)
+		} else {
+			sresults = append(sresults, "")
+		}
+
+		bresults = append(bresults, found)
+	}
+
+	return sresults, bresults
+}
+
 // Return a slice containing the property value of each instance of the given
 // Ec2Selection, given this property name as a string.
 // The string values appear in the same order than the instances do.
 // If their are duplicate instances in the given Ec2Selection, there are
 // duplicate string values in the returned slice as well.
 //
-func getInstancesProperty(instances *Ec2Selection, property string) []string {
-	if property == "name" {
-		return GetNames(instances)
-	} else if (property == "ip") || (property == "public-ip") {
-		return GetPublicIps(instances)
-	} else if property == "private-ip" {
-		return GetPrivateIps(instances)
-	} else if property == "region" {
-		return GetRegions(instances)
-	} else if property == "user" {
-		return GetUsers(instances)
-	} else if property == "fiid" {
-		return GetFiids(instances)
-	} else if property == "fleet" {
-		return GetFleets(instances)
-	} else if property == "uiid" {
-		return GetUiids(instances)
-	} else {
-		Error("unknown property '%s'", property)
+func getInstancesProperty(instances *Ec2Selection, property string) ([]string, []bool) {
+	var sresults []string
+	var bresults []bool
+	var idx int
 
-		// Dead code
-		return make([]string, 0)
+	if property == "name" {
+		sresults = GetNames(instances)
+	} else if (property == "ip") || (property == "public-ip") {
+		sresults = GetPublicIps(instances)
+	} else if property == "private-ip" {
+		sresults = GetPrivateIps(instances)
+	} else if property == "region" {
+		sresults = GetRegions(instances)
+	} else if property == "user" {
+		sresults = GetUsers(instances)
+	} else if property == "fiid" {
+		sresults = GetFiids(instances)
+	} else if property == "fleet" {
+		sresults = GetFleets(instances)
+	} else if property == "uiid" {
+		sresults = GetUiids(instances)
+	} else {
+		return GetAttributes(instances, property)
 	}
+
+	bresults = make([]bool, len(sresults))
+
+	for idx, _ = range sresults {
+		bresults[idx] = true
+	}
+
+	return sresults, bresults
 }
 
 func Get(args []string) {
@@ -427,13 +458,13 @@ func Get(args []string) {
 		}
 
 		if *optionSortBy != "" {
-			sortkeys = getInstancesProperty(instances,
+			sortkeys, _ = getInstancesProperty(instances,
 				*optionSortBy)
 
 			sortInstances(instances, sortkeys)
 		}
 
-		results = getInstancesProperty(instances, args[0])
+		results, _ = getInstancesProperty(instances, args[0])
 	}
 
 	if *optionUniqueResults {
