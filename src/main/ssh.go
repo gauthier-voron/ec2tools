@@ -33,6 +33,11 @@ type ReaderTransmitterAllPrefix struct {
 	Readers   []io.Reader
 }
 
+type ReaderTransmitterMergeParallel struct {
+	Instances []*Ec2Instance
+	Readers   []io.Reader
+}
+
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
@@ -178,6 +183,76 @@ func (this *ReaderTransmitterAllPrefix) Transmit(to *os.File) {
 	}
 
 	close(done)
+}
+
+func NewReaderTransmitterMergeParallel(readers []io.Reader) *ReaderTransmitterMergeParallel {
+	var ret ReaderTransmitterMergeParallel
+
+	ret.Readers = readers
+
+	return &ret
+}
+
+func (this *ReaderTransmitterMergeParallel) computeFormat() string {
+	var width, buffer int
+	var format string
+
+	width = 1
+	buffer = len(this.Readers)
+
+	for buffer >= 10 {
+		width += 1
+		buffer /= 10
+	}
+
+	format = fmt.Sprintf("%s[%%%dd/%%%dd] %%s", width, width)
+	return format
+}
+
+func (this *ReaderTransmitterMergeParallel) transmitFormatted(lines []string,
+	to *os.File) {
+	var packedLines map[string]int = make(map[string]int)
+	var line, bufline, format string
+	var count, max int
+
+	for _, line = range lines {
+		packedLines[line] += 1
+	}
+
+	format = this.computeFormat()
+
+	max = len(lines)
+	for line, count = range packedLines {
+		if count == max {
+			bufline = fmt.Sprintf(format, "*", count, max, line)
+		} else {
+			bufline = fmt.Sprintf(format, " ", count, max, line)
+		}
+
+		to.WriteString(bufline)
+	}
+}
+
+func (this *ReaderTransmitterMergeParallel) Transmit(to *os.File) {
+	var bufreader *bufio.Reader
+	var reader io.Reader
+	var lines []string
+	var line []byte
+	var err error
+
+	for {
+		lines = make([]string, 0)
+
+		for _, reader = range this.Readers {
+			bufreader = bufio.NewReader(reader)
+			line, err = bufreader.ReadBytes('\n')
+			if err == nil {
+				lines = append(lines, string(line))
+			}
+		}
+
+		this.transmitFormatted(lines, to)
+	}
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
