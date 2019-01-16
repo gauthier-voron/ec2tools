@@ -25,5 +25,21 @@ Options:
 		PROGNAME, PROGNAME, DEFAULT_CONTEXT)
 }
 
+func DoDelete(instances *Ec2Selection, attribute string) {
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		delete(instance.Attributes, attribute)
+	}
+}
+
+func DoSet(instances *Ec2Selection, attribute, value string) {
+	var instance *Ec2Instance
+
+	for _, instance = range instances.Instances {
+		instance.Attributes[attribute] = value
+	}
+}
+
 func Set(args []string) {
 }
