@@ -21,7 +21,7 @@ var optionUpdate *bool
 
 func PrintGetUsage() {
 	fmt.Printf(`Usage: %s get [options] fleets
-       %s get [options] <property> <instances-specification...>
+       %s get [options] [<instances-specification...> --] <property>
 
 Print information about fleets and instances.
 The first form print a list of the fleet names launched and not yet stopped in
@@ -63,6 +63,8 @@ Instance specification:
 
 Options:
   --context <path>            path of the context file (default: '%s')
+
+  --defined                   only print defined properties
 
   --sort                      sort instances by their uiid before to print
                               their properties (shortcut for '--sort-by uiid')
