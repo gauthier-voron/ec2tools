@@ -124,6 +124,50 @@ func buildSshCmdline(instance *Ec2Instance, cmdline []string, timeout *int,
 	return sshcmd
 }
 
+type SshProcessBuilder struct {
+	instance *Ec2Instance // remote instance to execute on
+	cmdline  []string     // command to execute on remote instance
+	timeout  *int         // optional timeout (in seconds)
+	user     *string      // optional ssh user
+	verbose  bool         // enable verbose mode
+}
+
+func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder {
+	var this SshProcessBuilder
+
+	this.instance = instance
+	this.cmdline = cmdline
+	this.timeout = nil
+	this.user = nil
+	this.verbose = false
+
+	return &this
+}
+
+func (this *SshProcessBuilder) Timeout(timeout int) *SshProcessBuilder {
+	this.timeout = &timeout
+	return this
+}
+
+func (this *SshProcessBuilder) User(user string) *SshProcessBuilder {
+	this.user = &user
+	return this
+}
+
+func (this *SshProcessBuilder) Verbose(verbose bool) *SshProcessBuilder {
+	this.verbose = verbose
+	return this
+}
+
+func (this *SshProcessBuilder) Build() *Process {
+	var cmdline []string
+
+	cmdline = buildSshCmdline(this.instance, this.cmdline, this.timeout,
+		this.verbose, this.user)
+
+	return NewProcess(cmdline)
+}
+
 func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 	var cmd *exec.Cmd
 	var cctx context.Context
