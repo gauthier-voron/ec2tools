@@ -185,6 +185,48 @@ type ValidityMap interface {
 	Finalize()
 }
 
+// A validityMap defining validity has "owning a public IPv4 address".
+//
+type ValidityMapIp struct {
+	PublicIps map[*Ec2Instance]string
+}
+
+// Create a new and empty ValidityNapIp.
+//
+func NewValidityMapIp() *ValidityMapIp {
+	var this ValidityMapIp
+
+	this.PublicIps = make(map[*Ec2Instance]string)
+
+	return &this
+}
+
+// Update the validity of the specified instance.
+// Ignore the timeout parameter.
+//
+func (this *ValidityMapIp) UpdateValidity(instance *Ec2Instance,
+	timeout *Timeout) {
+
+	if instance.PublicIp != "" {
+		this.PublicIps[instance] = instance.PublicIp
+	}
+}
+
+// Check if the given instance is valid: does it have a Public IPv4.
+//
+func (this *ValidityMapIp) IsValid(instance *Ec2Instance) bool {
+	var found bool
+
+	_, found = this.PublicIps[instance]
+
+	return found
+}
+
+// Does nothing since their is no background task.
+//
+func (this *ValidityMapIp) Finalize() {
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func processOptionCount() {
