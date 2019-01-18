@@ -74,6 +74,31 @@ func (this *Pipe) Pop() (string, bool) {
 	return elem, has
 }
 
+// Try to pop the first element at the head of the pipe without blocking.
+// If there is no element to read or if the pipe has been closed, return an
+// empty string with false.
+// Otherwise, return the poped element with true.
+//
+func (this *Pipe) TryPop() (string, bool) {
+	var elem string
+	var has bool
+
+	this.lock.Lock()
+
+	if len(this.content) > 0 {
+		elem = this.content[0]
+		this.content = this.content[1:]
+		has = true
+	} else {
+		elem = ""
+		has = false
+	}
+
+	this.lock.Unlock()
+
+	return elem, has
+}
+
 // Close the pipe buffer, preventing subsequent Pipe.Push().
 // Element stored in the pipe buffer can still be poped.
 // No method invocation can block after this method returns.
