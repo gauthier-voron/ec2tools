@@ -128,6 +128,7 @@ type Process struct {
 	command  *exec.Cmd // internal Go representation of an external process
 	stdout   *Pipe     // pipe input buffer for stdout stream
 	stderr   *Pipe     // pipe input buffer for stderr stream
+	stdin    *Pipe     // pipe output buffer for stdin stream
 	exitcode chan *int // exit code (or nil) protected by implicit lock
 	exitwait chan bool // unlock-once condition for Process.WaitFinished
 }
@@ -140,6 +141,7 @@ func newProcess() *Process {
 	this.command = nil
 	this.stdout = NewPipe()
 	this.stderr = NewPipe()
+	this.stdin = NewPipe()
 	this.exitcode = make(chan *int, 1) // must have buffer of 1
 	this.exitwait = make(chan bool, 1) // must have buffer of 1
 
@@ -226,6 +228,23 @@ func pushStream(stream io.Reader, pipe *Pipe) {
 	}
 }
 
+// Write lines prom the given pipe buffer on the specified stream.
+// Stop and return when the pipe buffer closes.
+//
+func writePipe(pipe *Pipe, stream io.Writer) {
+	var str string
+	var has bool
+
+	for {
+		str, has = pipe.Pop()
+		if !has {
+			break
+		}
+
+		stream.Write([]byte(str))
+	}
+}
+
 // Start this process.
 // Launch the internal Go command and start to transfer lines between streams
 // and pipe buffers.
@@ -236,9 +255,11 @@ func pushStream(stream io.Reader, pipe *Pipe) {
 func (this *Process) Start() {
 	var done chan bool = make(chan bool)
 	var stdout, stderr io.ReadCloser
+	var stdin io.WriteCloser
 
 	stdout, _ = this.command.StdoutPipe()
 	stderr, _ = this.command.StderrPipe()
+	stdin, _ = this.command.StdinPipe()
 
 	this.command.Start()
 
@@ -253,8 +274,14 @@ func (this *Process) Start() {
 	}()
 
 	go func() {
+		writePipe(this.stdin, stdin)
+		stdin.Close()
+	}()
+
+	go func() {
 		<-done
 		<-done
+		this.stdin.Close()
 		this.wait()
 	}()
 }
@@ -300,6 +327,7 @@ func (this *Process) TryReadStderr() (string, bool) {
 // process is unspecified.
 //
 func (this *Process) WriteStdin(str string) {
+	this.stdin.Push(str)
 }
 
 // Close the input stream of this process.
@@ -307,6 +335,7 @@ func (this *Process) WriteStdin(str string) {
 // effect.
 //
 func (this *Process) CloseStdin() {
+	this.stdin.Close()
 }
 
 // Block until the external process finishes.
