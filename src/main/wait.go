@@ -313,6 +313,26 @@ func (this *ValidityMapSsh) Finalize() {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Main waiting loop related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Update the validity map for all instances contained in the given
+// selections.
+//
+func updateValidityMap(validityMap ValidityMap, selections []*Ec2Selection) {
+
+	var selection *Ec2Selection
+	var instance *Ec2Instance
+
+	for _, selection = range selections {
+		for _, instance = range selection.Instances {
+			validityMap.UpdateValidity(instance,
+				NewTimeoutFromSec(waitProcOptionTimeout))
+		}
+	}
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func processOptionCount() {
 	var mustEnd = false
