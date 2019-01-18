@@ -34,6 +34,7 @@ type processedOptionCount struct {
 var waitProcOptionCount processedOptionCount
 
 var waitProcOptionTimeout int
+var waitProcOptionTimeoutz *Timeout
 
 func PrintWaitUsage() {
 	fmt.Printf(`Usage: %s wait [options] [<fleet-spec...>]
@@ -360,6 +361,56 @@ func validSelectionz(selection *Ec2Selection, validityMap ValidityMap) bool {
 	return (validCount >= requiredCount)
 }
 
+// Wait for sufficiently many instances to be valid for the given selections.
+// Update the given context and update the validity state of the instances
+// every seconds.
+// If not enough instances are reported valid before the end of the timeout,
+// return false, otherwise return true.
+//
+func waitFleetsz(ctx *Ec2Index, specs []string) bool {
+	var selections []*Ec2Selection
+	var selection *Ec2Selection
+	var validityMap ValidityMap
+	var valid bool
+
+	if *waitParams.OptionWaitFor == "ssh" {
+		validityMap = NewValidityMapSsh()
+	} else if *waitParams.OptionWaitFor == "ip" {
+		validityMap = NewValidityMapIp()
+	} else {
+		Error("invalid value for option --wait-for: '%s'",
+			*waitParams.OptionWaitFor)
+	}
+
+	for !waitProcOptionTimeoutz.IsOver() {
+		selections = selectFleets(ctx, specs)
+
+		updateValidityMap(validityMap, selections)
+
+		valid = true
+		for _, selection = range selections {
+			if !validSelectionz(selection, validityMap) {
+				valid = false
+				break
+			}
+		}
+
+		if valid {
+			validityMap.Finalize()
+			return true
+		}
+
+		time.Sleep(1000 * time.Millisecond)
+
+		UpdateContext(ctx)
+	}
+
+	validityMap.Finalize()
+	return false
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Argument parsing and option processing related code
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func processOptionCount() {
@@ -408,6 +459,7 @@ func processOptionTimeout() {
 
 	if *waitParams.OptionTimeout == "" {
 		waitProcOptionTimeout = 0
+		waitProcOptionTimeoutz = NewTimeoutNone()
 		return
 	}
 
@@ -420,6 +472,7 @@ func processOptionTimeout() {
 	}
 
 	waitProcOptionTimeout = int(secs)
+	waitProcOptionTimeoutz = NewTimeoutFromSec(int(secs))
 }
 
 func Wait(args []string) {
@@ -454,7 +507,7 @@ func Wait(args []string) {
 		Error("no context: %s", *waitParams.OptionContext)
 	}
 
-	success = WaitFleets(ctx, fleetSpecs)
+	success = waitFleetsz(ctx, fleetSpecs)
 
 	StoreEc2Index(*waitParams.OptionContext, ctx)
 
