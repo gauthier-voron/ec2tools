@@ -22,7 +22,7 @@ type waitParameters struct {
 var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
 var DEFAULT_WAIT_COUNT string = "100%"
 var DEFAULT_WAIT_TIMEOUT string = ""
-var DEFAULT_WAIT_WAIT_FOR string = "ip"
+var DEFAULT_WAIT_WAIT_FOR string = "ssh"
 
 var waitParams waitParameters
 
@@ -59,9 +59,9 @@ Options:
 
   --wait-for <wait-type>      when to consider an instance is ready: 'ip' when
                               it has a public IPv4 address. 'ssh' when it is
-                              reachable via ssh.
+                              reachable via ssh (default: '%s').
 `,
-		PROGNAME, DEFAULT_CONTEXT)
+		PROGNAME, DEFAULT_CONTEXT, DEFAULT_WAIT_WAIT_FOR)
 }
 
 func computeRequiredCount(maximumCount int) int {

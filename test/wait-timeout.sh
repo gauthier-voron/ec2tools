@@ -6,7 +6,7 @@ set -e
 ec2tools launch --replace --size=1 --price=0.001 --key="$TEST_KEY" 'test-fleet'
 
 # Should stop after 2 seconds
-ec2tools wait --timeout=2 'test-fleet' &
+ec2tools wait --wait-for='ip' --timeout=2 'test-fleet' &
 pid=$!
 
 sleep 3
