@@ -229,6 +229,91 @@ func (this *ValidityMapIp) Finalize() {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+// A validityMap defining validity has "can be reached by ssh".
+// To test that, launch ssh background processes on update (unless there is
+// already one running).
+// The remote process is siply the `true` command.
+// If the ssh process exits successfully, the instance is valid.
+//
+type ValidityMapSsh struct {
+	Processes map[*Ec2Instance]*Process
+}
+
+// Create a new empty ValidityMapSsh.
+//
+func NewValidityMapSsh() *ValidityMapSsh {
+	var this ValidityMapSsh
+
+	this.Processes = make(map[*Ec2Instance]*Process)
+
+	return &this
+}
+
+// Try to see if the specified instance is reachable.
+// If the process has no associated ssh background process, launch one.
+// If it has an associated ssh background process that finished with failure,
+// launch a new one.
+//
+func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
+	timeout *Timeout) {
+
+	var builder *SshProcessBuilder
+	var proc *Process
+	var found, exited bool
+	var exitcode int
+
+	proc, found = this.Processes[instance]
+
+	if found {
+		exitcode, exited = proc.ExitCode()
+	}
+
+	if (!found || (exited && (exitcode != 0))) {
+		builder = BuildSshProcess(instance, []string{"true"})
+
+		if !timeout.IsNone() {
+			if timeout.RemainingSeconds() > 15 {
+				builder.Timeout(15)
+			} else {
+				builder.Timeout(timeout.RemainingSeconds())
+			}
+		}
+
+		this.Processes[instance] = builder.Build()
+		this.Processes[instance].Start()
+	}
+}
+
+// Indicate if the given instance has been reached successfully by ssh.
+//
+func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
+	var proc *Process
+	var found, exited bool
+	var exitcode int
+
+	proc, found = this.Processes[instance]
+
+	if found {
+		exitcode, exited = proc.ExitCode()
+	}
+
+	return (found && exited && (exitcode == 0))
+}
+
+// Wait for all the background ssh processes to end.
+// Since all the ssh processes launched by this map have a timeout, this method
+// is guarantee to return (in a ten of seconds max).
+//
+func (this *ValidityMapSsh) Finalize() {
+	var proc *Process
+
+	for _, proc = range this.Processes {
+		proc.WaitFinished()
+	}
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 func processOptionCount() {
 	var mustEnd = false
 	var hasStarted = false
