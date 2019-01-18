@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -123,6 +124,7 @@ func (this *Pipe) Close() {
 //
 type Process struct {
 	command  *exec.Cmd // internal Go representation of an external process
+	exitcode chan *int // exit code (or nil) protected by implicit lock
 }
 
 // Create a new Process structure with a nil Process.command
@@ -131,6 +133,9 @@ func newProcess() *Process {
 	var this Process
 
 	this.command = nil
+	this.exitcode = make(chan *int, 1) // must have buffer of 1
+
+	this.exitcode <- nil // fill exitcode pointer with initial nil value
 
 	return &this
 }
@@ -164,6 +169,33 @@ func NewProcessTimeout(cmdline []string, timeout int) *Process {
 	return this
 }
 
+// Block until this process ends.
+// After this process finished, update the exitcode variable and unlock the
+// exitwait cond.
+//
+func (this *Process) wait() {
+	var exerr *exec.ExitError
+	var status int
+	var err error
+
+	err = this.command.Wait()
+
+	if err == nil {
+		status = 0
+	} else {
+		switch err.(type) {
+		case *exec.ExitError:
+			exerr = err.(*exec.ExitError)
+			status = exerr.Sys().(syscall.WaitStatus).ExitStatus()
+		default:
+			status = -1
+		}
+	}
+
+	<-this.exitcode
+	this.exitcode <- &status
+}
+
 // Start this process.
 // Launch the internal Go command and start to transfer lines between streams
 // and pipe buffers.
@@ -173,6 +205,10 @@ func NewProcessTimeout(cmdline []string, timeout int) *Process {
 //
 func (this *Process) Start() {
 	this.command.Start()
+
+	go func() {
+		this.wait()
+	}()
 }
 
 // Read the next line from this process standard output.
@@ -237,5 +273,14 @@ func (this *Process) WaitFinished() {
 // unspecified first value.
 //
 func (this *Process) ExitCode() (int, bool) {
-	return -1, false
+	var code *int
+
+	code = <-this.exitcode
+	this.exitcode <- code
+
+	if code == nil {
+		return -1, false
+	} else {
+		return *code, true
+	}
 }
