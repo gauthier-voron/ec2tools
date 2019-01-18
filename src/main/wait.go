@@ -73,41 +73,6 @@ func computeRequiredCount(maximumCount int) int {
 	}
 }
 
-func validInstance(instance *Ec2Instance) bool {
-	if *waitParams.OptionWaitFor == "ip" {
-		return instance.PublicIp != ""
-	} else if *waitParams.OptionWaitFor == "ssh" {
-		Error("not yet implemented value for option --wait-for: 'ssh'")
-		return false
-	} else {
-		Error("invalid value for option --wait-for: '%s'",
-			*waitParams.OptionWaitFor)
-		return false
-	}
-}
-
-func validSelection(selection *Ec2Selection) bool {
-	var validCount, requiredCount int
-	var instance *Ec2Instance
-	var maximumCount int = 0
-	var fleet *Ec2Fleet
-
-	for _, fleet = range selection.Fleets {
-		maximumCount += fleet.Size
-	}
-
-	requiredCount = computeRequiredCount(maximumCount)
-	validCount = 0
-
-	for _, instance = range selection.Instances {
-		if validInstance(instance) {
-			validCount += 1
-		}
-	}
-
-	return (validCount >= requiredCount)
-}
-
 func selectFleets(ctx *Ec2Index, specs []string) []*Ec2Selection {
 	var selections []*Ec2Selection = make([]*Ec2Selection, len(specs))
 	var spec string
@@ -122,44 +87,6 @@ func selectFleets(ctx *Ec2Index, specs []string) []*Ec2Selection {
 	}
 
 	return selections
-}
-
-func validContext(ctx *Ec2Index, fleetSpecs []string) bool {
-	var selection *Ec2Selection
-	var fleetSpec string
-	var err error
-
-	for _, fleetSpec = range fleetSpecs {
-		selection, err = ctx.Select([]string{fleetSpec})
-		if err != nil {
-			Error("invalid specification: %s", err.Error())
-		}
-
-		if !validSelection(selection) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func WaitFleets(ctx *Ec2Index, fleetSpecs []string) bool {
-	var elapsedSecs int = 0
-
-	for !validContext(ctx, fleetSpecs) {
-		if waitProcOptionTimeout > 0 {
-			if elapsedSecs >= waitProcOptionTimeout {
-				return false
-			}
-		}
-
-		time.Sleep(1000 * time.Millisecond)
-		elapsedSecs += 1
-
-		UpdateContext(ctx)
-	}
-
-	return true
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
