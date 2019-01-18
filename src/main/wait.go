@@ -161,6 +161,32 @@ func WaitFleets(ctx *Ec2Index, fleetSpecs []string) bool {
 	return true
 }
 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// ValidityMap related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Store which instance is valid, whatever the definition of valid is.
+//
+type ValidityMap interface {
+	// Update the validity of a given instance.
+	// Possibly use a background goroutine but be sure it finishes when
+	// the given timeout expires.
+	//
+	UpdateValidity(instance *Ec2Instance, timeout *Timeout)
+
+	// Check if the given instance is valid.
+	// An instance that has never been updated with UpdateValidity() cannot
+	// be valid.
+	//
+	IsValid(instance *Ec2Instance) bool
+
+	// Ensure all the background goroutines are finished.
+	//
+	Finalize()
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 func processOptionCount() {
 	var mustEnd = false
 	var hasStarted = false
