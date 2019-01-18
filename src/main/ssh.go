@@ -205,7 +205,7 @@ func (this *ReaderTransmitterMergeParallel) computeFormat() string {
 		buffer /= 10
 	}
 
-	format = fmt.Sprintf("%s[%%%dd/%%%dd] %%s", width, width)
+	format = fmt.Sprintf("%%s[%%%dd/%%%dd] %%s", width, width)
 	return format
 }
 
