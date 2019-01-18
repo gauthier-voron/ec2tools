@@ -265,7 +265,7 @@ func updateValidityMap(validityMap ValidityMap, selections []*Ec2Selection) {
 // The "sufficiently many" is defined by the `waitProcOptionCount` global
 // variable.
 //
-func validSelectionz(selection *Ec2Selection, validityMap ValidityMap) bool {
+func validSelection(selection *Ec2Selection, validityMap ValidityMap) bool {
 	var validCount, requiredCount int
 	var instance *Ec2Instance
 	var maximumCount int = 0
@@ -293,7 +293,7 @@ func validSelectionz(selection *Ec2Selection, validityMap ValidityMap) bool {
 // If not enough instances are reported valid before the end of the timeout,
 // return false, otherwise return true.
 //
-func waitFleetsz(ctx *Ec2Index, specs []string) bool {
+func waitFleets(ctx *Ec2Index, specs []string) bool {
 	var selections []*Ec2Selection
 	var selection *Ec2Selection
 	var validityMap ValidityMap
@@ -315,7 +315,7 @@ func waitFleetsz(ctx *Ec2Index, specs []string) bool {
 
 		valid = true
 		for _, selection = range selections {
-			if !validSelectionz(selection, validityMap) {
+			if !validSelection(selection, validityMap) {
 				valid = false
 				break
 			}
@@ -425,7 +425,7 @@ func Wait(args []string) {
 		Error("no context: %s", *waitParams.OptionContext)
 	}
 
-	success = waitFleetsz(ctx, fleetSpecs)
+	success = waitFleets(ctx, fleetSpecs)
 
 	StoreEc2Index(*waitParams.OptionContext, ctx)
 
