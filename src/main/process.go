@@ -1,5 +1,90 @@
 package main
 
+import (
+	"sync"
+)
+
+// A pipe buffer (LIFO) with unrestricted size.
+// Acts pretty much like a never blocking `chan string`.
+//
+type Pipe struct {
+	lock    sync.Mutex
+	cond    *sync.Cond
+	content []string
+	closed  bool
+}
+
+// Create a new pipe buffer.
+// The pipe buffer is initially open and empty.
+//
+func NewPipe() *Pipe {
+	var pipe Pipe
+
+	pipe.cond = sync.NewCond(&pipe.lock)
+	pipe.content = make([]string, 0)
+	pipe.closed = false
+
+	return &pipe
+}
+
+// Push a string element at the tail of the pipe buffer.
+// Always return without blocking.
+// Has no effect if the pipe buffer is closed.
+//
+func (this *Pipe) Push(elem string) {
+	this.lock.Lock()
+
+	if !this.closed {
+		this.content = append(this.content, elem)
+		this.cond.Broadcast()
+	}
+
+	this.lock.Unlock()
+}
+
+// Pop the first element at the head of the pipe buffer.
+// Block if the pipe buffer is open but there is no element to pop.
+// If there is something to pop, return it with true.
+// If the pipe buffer is closed (or get closed during the call), return an
+// empty string with false.
+//
+func (this *Pipe) Pop() (string, bool) {
+	var elem string
+	var has bool
+
+	this.lock.Lock()
+
+	for {
+		if len(this.content) > 0 {
+			elem = this.content[0]
+			this.content = this.content[1:]
+			has = true
+		} else if this.closed {
+			elem = ""
+			has = false
+		} else {
+			this.cond.Wait()
+			continue
+		}
+		break
+	}
+
+	this.lock.Unlock()
+
+	return elem, has
+}
+
+// Close the pipe buffer, preventing subsequent Pipe.Push().
+// Element stored in the pipe buffer can still be poped.
+// No method invocation can block after this method returns.
+//
+func (this *Pipe) Close() {
+	this.lock.Lock()
+	this.closed = true
+	this.cond.Broadcast()
+	this.lock.Unlock()
+}
+
 // An external process, monitored by the go process.
 // The Go process read its stdout and stderr and write its stdin.
 // The Go process also can wait for the termination of the external process and
