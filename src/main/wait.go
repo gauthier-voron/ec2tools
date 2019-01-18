@@ -33,8 +33,7 @@ type processedOptionCount struct {
 
 var waitProcOptionCount processedOptionCount
 
-var waitProcOptionTimeout int
-var waitProcOptionTimeoutz *Timeout
+var waitProcOptionTimeout *Timeout
 
 func PrintWaitUsage() {
 	fmt.Printf(`Usage: %s wait [options] [<fleet-spec...>]
@@ -255,7 +254,7 @@ func updateValidityMap(validityMap ValidityMap, selections []*Ec2Selection) {
 	for _, selection = range selections {
 		for _, instance = range selection.Instances {
 			validityMap.UpdateValidity(instance,
-				NewTimeoutFromSec(waitProcOptionTimeout))
+				waitProcOptionTimeout)
 		}
 	}
 }
@@ -309,7 +308,7 @@ func waitFleetsz(ctx *Ec2Index, specs []string) bool {
 			*waitParams.OptionWaitFor)
 	}
 
-	for !waitProcOptionTimeoutz.IsOver() {
+	for !waitProcOptionTimeout.IsOver() {
 		selections = selectFleets(ctx, specs)
 
 		updateValidityMap(validityMap, selections)
@@ -382,24 +381,16 @@ func processOptionCount() {
 }
 
 func processOptionTimeout() {
-	var secs int64
-
 	if *waitParams.OptionTimeout == "" {
-		waitProcOptionTimeout = 0
-		waitProcOptionTimeoutz = NewTimeoutNone()
-		return
+		waitProcOptionTimeout = NewTimeoutNone()
+	} else {
+		waitProcOptionTimeout =
+			NewTimeoutFromSpec(*waitParams.OptionTimeout)
+		if waitProcOptionTimeout == nil {
+			Error("invalid value for option --timeout: '%s'",
+				*waitParams.OptionTimeout)
+		}
 	}
-
-	// Thanks to launch.go
-	secs = timespecToSec(*waitParams.OptionTimeout)
-
-	if secs < 0 {
-		Error("invalid value for option --timeout: '%s'",
-			*waitParams.OptionTimeout)
-	}
-
-	waitProcOptionTimeout = int(secs)
-	waitProcOptionTimeoutz = NewTimeoutFromSec(int(secs))
 }
 
 func Wait(args []string) {
