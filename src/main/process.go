@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -124,6 +126,7 @@ func (this *Pipe) Close() {
 //
 type Process struct {
 	command  *exec.Cmd // internal Go representation of an external process
+	stdout   *Pipe     // pipe input buffer for stdout stream
 	exitcode chan *int // exit code (or nil) protected by implicit lock
 	exitwait chan bool // unlock-once condition for Process.WaitFinished
 }
@@ -134,6 +137,7 @@ func newProcess() *Process {
 	var this Process
 
 	this.command = nil
+	this.stdout = NewPipe()
 	this.exitcode = make(chan *int, 1) // must have buffer of 1
 	this.exitwait = make(chan bool, 1) // must have buffer of 1
 
@@ -199,6 +203,27 @@ func (this *Process) wait() {
 	this.exitwait <- true
 }
 
+// Push the lines incoming on the given stream into the given pipe buffer.
+// Stop transferring lines and return whem the stream closes.
+//
+func pushStream(stream io.Reader, pipe *Pipe) {
+	var reader *bufio.Reader
+	var bytes []byte
+	var err error
+
+	reader = bufio.NewReader(stream)
+
+	for {
+		bytes, err = reader.ReadBytes('\n')
+		if err != nil {
+			pipe.Close()
+			break
+		}
+
+		pipe.Push(string(bytes))
+	}
+}
+
 // Start this process.
 // Launch the internal Go command and start to transfer lines between streams
 // and pipe buffers.
@@ -207,9 +232,20 @@ func (this *Process) wait() {
 // This method does not block.
 //
 func (this *Process) Start() {
+	var done chan bool = make(chan bool)
+	var stdout io.ReadCloser
+
+	stdout, _ = this.command.StdoutPipe()
+
 	this.command.Start()
 
 	go func() {
+		pushStream(stdout, this.stdout)
+		done <- true
+	}()
+
+	go func() {
+		<-done
 		this.wait()
 	}()
 }
@@ -220,7 +256,7 @@ func (this *Process) Start() {
 // Otherwise return the line (with the end-of-line character) and true.
 //
 func (this *Process) ReadStdout() (string, bool) {
-	return "", false
+	return this.stdout.Pop()
 }
 
 // Try to read the next line from this process standard output, not blocking.
@@ -229,7 +265,7 @@ func (this *Process) ReadStdout() (string, bool) {
 // Otherwise return the line (with the end-of-line character) and true.
 //
 func (this *Process) TryReadStdout() (string, bool) {
-	return "", false
+	return this.stdout.TryPop()
 }
 
 // Read the next line from this process standard error.
