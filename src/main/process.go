@@ -125,6 +125,7 @@ func (this *Pipe) Close() {
 type Process struct {
 	command  *exec.Cmd // internal Go representation of an external process
 	exitcode chan *int // exit code (or nil) protected by implicit lock
+	exitwait chan bool // unlock-once condition for Process.WaitFinished
 }
 
 // Create a new Process structure with a nil Process.command
@@ -134,6 +135,7 @@ func newProcess() *Process {
 
 	this.command = nil
 	this.exitcode = make(chan *int, 1) // must have buffer of 1
+	this.exitwait = make(chan bool, 1) // must have buffer of 1
 
 	this.exitcode <- nil // fill exitcode pointer with initial nil value
 
@@ -194,6 +196,7 @@ func (this *Process) wait() {
 
 	<-this.exitcode
 	this.exitcode <- &status
+	this.exitwait <- true
 }
 
 // Start this process.
@@ -266,6 +269,7 @@ func (this *Process) CloseStdin() {
 // code and true.
 //
 func (this *Process) WaitFinished() {
+	this.exitwait <- <-this.exitwait
 }
 
 // Return the exit code of this process.
