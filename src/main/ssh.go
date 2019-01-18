@@ -92,41 +92,63 @@ Modes:
 		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
-func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
-	var cmd *exec.Cmd
-	var user, dest string
-	var cctx context.Context
-	var sshcmd []string = []string{
+func buildSshCmdline(instance *Ec2Instance, cmdline []string, timeout *int,
+	verbose bool, user *string) []string {
+
+	var sshuser, dest string
+	var sshcmd []string = []string{"ssh",
 		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
 		"-o", "UserKnownHostsFile=/dev/null",
 	}
 
-	if *optionTimeout >= 0 {
+	if timeout != nil {
 		sshcmd = append(sshcmd, "-o",
-			fmt.Sprintf("ConnectTimeout=%d", *optionTimeout))
+			fmt.Sprintf("ConnectTimeout=%d", *timeout))
 	}
 
-	if *optionVerbose {
+	if verbose {
 		sshcmd = append(sshcmd, "-vvv")
 	}
 
-	if *optionUser != "" {
-		user = *optionUser
+	if user != nil {
+		sshuser = *user
 	} else {
-		user = instance.Fleet.User
+		sshuser = instance.Fleet.User
 	}
 
-	dest = user + "@" + instance.PublicIp
+	dest = sshuser + "@" + instance.PublicIp
 
 	sshcmd = append(sshcmd, dest)
-	sshcmd = append(sshcmd, command...)
+	sshcmd = append(sshcmd, cmdline...)
+
+	return sshcmd
+}
+
+func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
+	var cmd *exec.Cmd
+	var cctx context.Context
+	var sshcmd []string
+	var verbose bool = *optionVerbose
+	var timeout *int = nil
+	var user *string = nil
+	var itimeout int
+
+	if *optionTimeout >= 0 {
+		itimeout = int(*optionTimeout)
+		timeout = &itimeout
+	}
+	if *optionUser != "" {
+		user = optionUser
+	}
+
+	sshcmd = buildSshCmdline(instance, command, timeout, verbose, user)
 
 	if *optionTimeout < 0 {
-		cmd = exec.Command("ssh", sshcmd...)
+		cmd = exec.Command(sshcmd[0], sshcmd[1:]...)
 	} else {
 		cctx, _ = context.WithTimeout(context.Background(),
 			time.Duration(*optionTimeout)*time.Second)
-		cmd = exec.CommandContext(cctx, "ssh", sshcmd...)
+		cmd = exec.CommandContext(cctx, sshcmd[0], sshcmd[1:]...)
 	}
 
 	return cmd
