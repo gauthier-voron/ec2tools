@@ -195,7 +195,7 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 		exitcode, exited = proc.ExitCode()
 	}
 
-	if (!found || (exited && (exitcode != 0))) {
+	if !found || (exited && (exitcode != 0)) {
 		builder = BuildSshProcess(instance, []string{"true"})
 
 		if !timeout.IsNone() {
