@@ -22,7 +22,7 @@ type waitParameters struct {
 var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
 var DEFAULT_WAIT_COUNT string = "100%"
 var DEFAULT_WAIT_TIMEOUT string = ""
-var DEFAULT_WAIT_WAIT_FOR string = "ip"
+var DEFAULT_WAIT_WAIT_FOR string = "ssh"
 
 var waitParams waitParameters
 
@@ -33,7 +33,7 @@ type processedOptionCount struct {
 
 var waitProcOptionCount processedOptionCount
 
-var waitProcOptionTimeout int
+var waitProcOptionTimeout *Timeout
 
 func PrintWaitUsage() {
 	fmt.Printf(`Usage: %s wait [options] [<fleet-spec...>]
@@ -59,9 +59,9 @@ Options:
 
   --wait-for <wait-type>      when to consider an instance is ready: 'ip' when
                               it has a public IPv4 address. 'ssh' when it is
-                              reachable via ssh.
+                              reachable via ssh (default: '%s').
 `,
-		PROGNAME, DEFAULT_CONTEXT)
+		PROGNAME, DEFAULT_CONTEXT, DEFAULT_WAIT_WAIT_FOR)
 }
 
 func computeRequiredCount(maximumCount int) int {
@@ -72,20 +72,200 @@ func computeRequiredCount(maximumCount int) int {
 	}
 }
 
-func validInstance(instance *Ec2Instance) bool {
-	if *waitParams.OptionWaitFor == "ip" {
-		return instance.PublicIp != ""
-	} else if *waitParams.OptionWaitFor == "ssh" {
-		Error("not yet implemented value for option --wait-for: 'ssh'")
-		return false
-	} else {
-		Error("invalid value for option --wait-for: '%s'",
-			*waitParams.OptionWaitFor)
-		return false
+func selectFleets(ctx *Ec2Index, specs []string) []*Ec2Selection {
+	var selections []*Ec2Selection = make([]*Ec2Selection, len(specs))
+	var spec string
+	var err error
+	var i int
+
+	for i, spec = range specs {
+		selections[i], err = ctx.Select([]string{spec})
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
+		}
+	}
+
+	return selections
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// ValidityMap related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Store which instance is valid, whatever the definition of valid is.
+//
+type ValidityMap interface {
+	// Update the validity of a given instance.
+	// Possibly use a background goroutine but be sure it finishes when
+	// the given timeout expires.
+	//
+	UpdateValidity(instance *Ec2Instance, timeout *Timeout)
+
+	// Check if the given instance is valid.
+	// An instance that has never been updated with UpdateValidity() cannot
+	// be valid.
+	//
+	IsValid(instance *Ec2Instance) bool
+
+	// Ensure all the background goroutines are finished.
+	//
+	Finalize()
+}
+
+// A validityMap defining validity has "owning a public IPv4 address".
+//
+type ValidityMapIp struct {
+	PublicIps map[*Ec2Instance]string
+}
+
+// Create a new and empty ValidityNapIp.
+//
+func NewValidityMapIp() *ValidityMapIp {
+	var this ValidityMapIp
+
+	this.PublicIps = make(map[*Ec2Instance]string)
+
+	return &this
+}
+
+// Update the validity of the specified instance.
+// Ignore the timeout parameter.
+//
+func (this *ValidityMapIp) UpdateValidity(instance *Ec2Instance,
+	timeout *Timeout) {
+
+	if instance.PublicIp != "" {
+		this.PublicIps[instance] = instance.PublicIp
 	}
 }
 
-func validSelection(selection *Ec2Selection) bool {
+// Check if the given instance is valid: does it have a Public IPv4.
+//
+func (this *ValidityMapIp) IsValid(instance *Ec2Instance) bool {
+	var found bool
+
+	_, found = this.PublicIps[instance]
+
+	return found
+}
+
+// Does nothing since their is no background task.
+//
+func (this *ValidityMapIp) Finalize() {
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// A validityMap defining validity has "can be reached by ssh".
+// To test that, launch ssh background processes on update (unless there is
+// already one running).
+// The remote process is siply the `true` command.
+// If the ssh process exits successfully, the instance is valid.
+//
+type ValidityMapSsh struct {
+	Processes map[*Ec2Instance]*Process
+}
+
+// Create a new empty ValidityMapSsh.
+//
+func NewValidityMapSsh() *ValidityMapSsh {
+	var this ValidityMapSsh
+
+	this.Processes = make(map[*Ec2Instance]*Process)
+
+	return &this
+}
+
+// Try to see if the specified instance is reachable.
+// If the process has no associated ssh background process, launch one.
+// If it has an associated ssh background process that finished with failure,
+// launch a new one.
+//
+func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
+	timeout *Timeout) {
+
+	var builder *SshProcessBuilder
+	var proc *Process
+	var found, exited bool
+	var exitcode int
+
+	proc, found = this.Processes[instance]
+
+	if found {
+		exitcode, exited = proc.ExitCode()
+	}
+
+	if !found || (exited && (exitcode != 0)) {
+		builder = BuildSshProcess(instance, []string{"true"})
+
+		if !timeout.IsNone() {
+			if timeout.RemainingSeconds() > 15 {
+				builder.Timeout(15)
+			} else {
+				builder.Timeout(timeout.RemainingSeconds())
+			}
+		}
+
+		this.Processes[instance] = builder.Build()
+		this.Processes[instance].Start()
+	}
+}
+
+// Indicate if the given instance has been reached successfully by ssh.
+//
+func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
+	var proc *Process
+	var found, exited bool
+	var exitcode int
+
+	proc, found = this.Processes[instance]
+
+	if found {
+		exitcode, exited = proc.ExitCode()
+	}
+
+	return (found && exited && (exitcode == 0))
+}
+
+// Wait for all the background ssh processes to end.
+// Since all the ssh processes launched by this map have a timeout, this method
+// is guarantee to return (in a ten of seconds max).
+//
+func (this *ValidityMapSsh) Finalize() {
+	var proc *Process
+
+	for _, proc = range this.Processes {
+		proc.WaitFinished()
+	}
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Main waiting loop related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Update the validity map for all instances contained in the given
+// selections.
+//
+func updateValidityMap(validityMap ValidityMap, selections []*Ec2Selection) {
+
+	var selection *Ec2Selection
+	var instance *Ec2Instance
+
+	for _, selection = range selections {
+		for _, instance = range selection.Instances {
+			validityMap.UpdateValidity(instance,
+				waitProcOptionTimeout)
+		}
+	}
+}
+
+// Check if the selection is valid.
+// The selection is valid if sufficiently many instances are reported valid
+// according to the validity map.
+// The "sufficiently many" is defined by the `waitProcOptionCount` global
+// variable.
+//
+func validSelection(selection *Ec2Selection, validityMap ValidityMap) bool {
 	var validCount, requiredCount int
 	var instance *Ec2Instance
 	var maximumCount int = 0
@@ -99,7 +279,7 @@ func validSelection(selection *Ec2Selection) bool {
 	validCount = 0
 
 	for _, instance = range selection.Instances {
-		if validInstance(instance) {
+		if validityMap.IsValid(instance) {
 			validCount += 1
 		}
 	}
@@ -107,43 +287,57 @@ func validSelection(selection *Ec2Selection) bool {
 	return (validCount >= requiredCount)
 }
 
-func validContext(ctx *Ec2Index, fleetSpecs []string) bool {
+// Wait for sufficiently many instances to be valid for the given selections.
+// Update the given context and update the validity state of the instances
+// every seconds.
+// If not enough instances are reported valid before the end of the timeout,
+// return false, otherwise return true.
+//
+func waitFleets(ctx *Ec2Index, specs []string) bool {
+	var selections []*Ec2Selection
 	var selection *Ec2Selection
-	var fleetSpec string
-	var err error
+	var validityMap ValidityMap
+	var valid bool
 
-	for _, fleetSpec = range fleetSpecs {
-		selection, err = ctx.Select([]string{fleetSpec})
-		if err != nil {
-			Error("invalid specification: %s", err.Error())
-		}
-
-		if !validSelection(selection) {
-			return false
-		}
+	if *waitParams.OptionWaitFor == "ssh" {
+		validityMap = NewValidityMapSsh()
+	} else if *waitParams.OptionWaitFor == "ip" {
+		validityMap = NewValidityMapIp()
+	} else {
+		Error("invalid value for option --wait-for: '%s'",
+			*waitParams.OptionWaitFor)
 	}
 
-	return true
-}
+	for !waitProcOptionTimeout.IsOver() {
+		selections = selectFleets(ctx, specs)
 
-func WaitFleets(ctx *Ec2Index, fleetSpecs []string) bool {
-	var elapsedSecs int = 0
+		updateValidityMap(validityMap, selections)
 
-	for !validContext(ctx, fleetSpecs) {
-		if waitProcOptionTimeout > 0 {
-			if elapsedSecs >= waitProcOptionTimeout {
-				return false
+		valid = true
+		for _, selection = range selections {
+			if !validSelection(selection, validityMap) {
+				valid = false
+				break
 			}
 		}
 
+		if valid {
+			validityMap.Finalize()
+			return true
+		}
+
 		time.Sleep(1000 * time.Millisecond)
-		elapsedSecs += 1
 
 		UpdateContext(ctx)
 	}
 
-	return true
+	validityMap.Finalize()
+	return false
 }
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Argument parsing and option processing related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func processOptionCount() {
 	var mustEnd = false
@@ -187,22 +381,16 @@ func processOptionCount() {
 }
 
 func processOptionTimeout() {
-	var secs int64
-
 	if *waitParams.OptionTimeout == "" {
-		waitProcOptionTimeout = 0
-		return
+		waitProcOptionTimeout = NewTimeoutNone()
+	} else {
+		waitProcOptionTimeout =
+			NewTimeoutFromSpec(*waitParams.OptionTimeout)
+		if waitProcOptionTimeout == nil {
+			Error("invalid value for option --timeout: '%s'",
+				*waitParams.OptionTimeout)
+		}
 	}
-
-	// Thanks to launch.go
-	secs = timespecToSec(*waitParams.OptionTimeout)
-
-	if secs < 0 {
-		Error("invalid value for option --timeout: '%s'",
-			*waitParams.OptionTimeout)
-	}
-
-	waitProcOptionTimeout = int(secs)
 }
 
 func Wait(args []string) {
@@ -237,7 +425,7 @@ func Wait(args []string) {
 		Error("no context: %s", *waitParams.OptionContext)
 	}
 
-	success = WaitFleets(ctx, fleetSpecs)
+	success = waitFleets(ctx, fleetSpecs)
 
 	StoreEc2Index(*waitParams.OptionContext, ctx)
 

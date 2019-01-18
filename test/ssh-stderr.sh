@@ -7,11 +7,6 @@ ec2tools launch --replace --size=1 --price="$TEST_PRICE" --key="$TEST_KEY" \
 	 'test-fleet'
 ec2tools wait
 
-# Replace by `ec2tools wait --wait-for=ssh` when available
-while ! ec2tools ssh true ; do
-    sleep 1
-done
-
 # Create a script that print interleaved output and error before to exit
 script=$(mktemp --suffix='.sh' 'test-script.XXXXXXXXXX')
 cat > "$script" <<EOF
