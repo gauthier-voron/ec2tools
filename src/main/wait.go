@@ -107,6 +107,22 @@ func validSelection(selection *Ec2Selection) bool {
 	return (validCount >= requiredCount)
 }
 
+func selectFleets(ctx *Ec2Index, specs []string) []*Ec2Selection {
+	var selections []*Ec2Selection = make([]*Ec2Selection, len(specs))
+	var spec string
+	var err error
+	var i int
+
+	for i, spec = range specs {
+		selections[i], err = ctx.Select([]string{spec})
+		if err != nil {
+			Error("invalid specification: %s", err.Error())
+		}
+	}
+
+	return selections
+}
+
 func validContext(ctx *Ec2Index, fleetSpecs []string) bool {
 	var selection *Ec2Selection
 	var fleetSpec string
