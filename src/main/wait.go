@@ -332,6 +332,34 @@ func updateValidityMap(validityMap ValidityMap, selections []*Ec2Selection) {
 	}
 }
 
+// Check if the selection is valid.
+// The selection is valid if sufficiently many instances are reported valid
+// according to the validity map.
+// The "sufficiently many" is defined by the `waitProcOptionCount` global
+// variable.
+//
+func validSelectionz(selection *Ec2Selection, validityMap ValidityMap) bool {
+	var validCount, requiredCount int
+	var instance *Ec2Instance
+	var maximumCount int = 0
+	var fleet *Ec2Fleet
+
+	for _, fleet = range selection.Fleets {
+		maximumCount += fleet.Size
+	}
+
+	requiredCount = computeRequiredCount(maximumCount)
+	validCount = 0
+
+	for _, instance = range selection.Instances {
+		if validityMap.IsValid(instance) {
+			validCount += 1
+		}
+	}
+
+	return (validCount >= requiredCount)
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func processOptionCount() {
