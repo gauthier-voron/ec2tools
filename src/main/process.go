@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"os/exec"
 	"sync"
+	"time"
 )
 
 // A pipe buffer (LIFO) with unrestricted size.
@@ -119,15 +122,28 @@ func (this *Pipe) Close() {
 // termination.
 //
 type Process struct {
+	command  *exec.Cmd // internal Go representation of an external process
+}
+
+// Create a new Process structure with a nil Process.command
+//
+func newProcess() *Process {
+	var this Process
+
+	this.command = nil
+
+	return &this
 }
 
 // Create a new process with the specified command line.
 // The Process does not start immediately.
 //
 func NewProcess(cmdline []string) *Process {
-	var this Process
+	var this *Process = newProcess()
 
-	return &this
+	this.command = exec.Command(cmdline[0], cmdline[1:]...)
+
+	return this
 }
 
 // Create a new process with the specified command line, sopping after a given
@@ -135,9 +151,17 @@ func NewProcess(cmdline []string) *Process {
 // The Process does not start immediately.
 //
 func NewProcessTimeout(cmdline []string, timeout int) *Process {
-	var this Process
+	var this *Process = newProcess()
+	var lifetime time.Duration
+	var ctx context.Context
 
-	return &this
+	lifetime = time.Duration(timeout) * time.Second
+
+	ctx, _ = context.WithTimeout(context.Background(), lifetime)
+
+	this.command = exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)
+
+	return this
 }
 
 // Start this process.
@@ -148,6 +172,7 @@ func NewProcessTimeout(cmdline []string, timeout int) *Process {
 // This method does not block.
 //
 func (this *Process) Start() {
+	this.command.Start()
 }
 
 // Read the next line from this process standard output.
