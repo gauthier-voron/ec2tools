@@ -130,6 +130,32 @@ func GetProperty(instance *Ec2Instance, name string) *Property {
 	}
 }
 
+// Return the trait name corresponding to a given one letter shortcut.
+// The second return value is a boolean indicating if the shortcut exists.
+//
+func getShortcutName(c rune) (string, bool) {
+	switch c {
+	case 'd':
+		return "fiid", true
+	case 'D':
+		return "uiid", true
+	case 'f':
+		return "fleet", true
+	case 'I':
+		return "public-ip", true
+	case 'i':
+		return "private-ip", true
+	case 'n':
+		return "name", true
+	case 'r':
+		return "region", true
+	case 'u':
+		return "user", true
+	default:
+		return "", false
+	}
+}
+
 // Parse a string containing printf like formats and apply it to a specific
 // instance.
 // The format has the following rules:
@@ -144,5 +170,48 @@ func GetProperty(instance *Ec2Instance, name string) *Property {
 // Return the replaced string.
 //
 func Format(pattern string, instance *Ec2Instance) string {
-	return pattern
+	var percent bool = false
+	var property bool = false
+	var propStart, pos int
+	var ret string = ""
+	var name string
+	var valid bool
+	var c rune
+
+	for pos, c = range pattern {
+		if property {
+			if c == '}' {
+				name = pattern[propStart:pos]
+				ret += GetProperty(instance, name).Value
+				property = false
+			}
+			continue
+		}
+
+		if percent {
+			name, valid = getShortcutName(c)
+
+			if valid {
+				ret += GetProperty(instance, name).Value
+			} else {
+				if c == '{' {
+					property = true
+					propStart = pos + 1
+				} else {
+					ret += string(c)
+				}
+			}
+
+			percent = false
+			continue
+		}
+
+		if c == '%' {
+			percent = true
+		} else {
+			ret += string(c)
+		}
+	}
+
+	return ret
 }
