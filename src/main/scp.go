@@ -360,6 +360,54 @@ func scpReceive(instances *Ec2Selection, paths []string) {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Scp send mode related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Return a Process object for the given instance to send the given source
+// paths to the specified remote target.
+// The target is a string that may be empty.
+//
+func buildScpSend(instance *Ec2Instance, sources []string, target string) *Process {
+	var user, remote string
+	var operands, cmdline []string
+
+	if *optionUser != "" {
+		user = *optionUser
+	} else {
+		user = instance.Fleet.User
+	}
+
+	remote = user + "@" + instance.PublicIp
+	operands = append(sources, remote + ":" + target)
+	cmdline = buildScpCmdline(operands)
+
+	return NewProcess(cmdline)
+}
+
+// Perform the scp send for the specified instances selection with the given
+// source local paths and the given target remote path (that may be empty).
+// This function never returns.
+//
+func scpDoSend(instances *Ec2Selection, sources []string, target string) {
+	var processes map[*Ec2Instance]*Process
+	var instance *Ec2Instance
+	var found bool
+
+	processes = make(map[*Ec2Instance]*Process)
+
+	for _, instance = range instances.Instances {
+		_, found = processes[instance]
+		if found {
+			continue
+		}
+
+		processes[instance] = buildScpSend(instance, sources, target)
+	}
+
+	os.Exit(runProcesses(processes))
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func Scp(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
