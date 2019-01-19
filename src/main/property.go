@@ -106,7 +106,28 @@ func GetAttribute(instance *Ec2Instance, name string) *Property {
 // field set to false.
 //
 func GetProperty(instance *Ec2Instance, name string) *Property {
-	return nil
+	switch name {
+	case "fleet":
+		return GetFleet(instance)
+	case "fiid":
+		return GetFiid(instance)
+	case "ip":
+		return GetPublicIp(instance)
+	case "name":
+		return GetName(instance)
+	case "public-ip":
+		return GetPublicIp(instance)
+	case "private-ip":
+		return GetPrivateIp(instance)
+	case "region":
+		return GetRegion(instance)
+	case "uiid":
+		return GetUiid(instance)
+	case "user":
+		return GetUser(instance)
+	default:
+		return GetAttribute(instance, name)
+	}
 }
 
 // Parse a string containing printf like formats and apply it to a specific
