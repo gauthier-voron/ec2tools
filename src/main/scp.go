@@ -127,7 +127,7 @@ func buildScpReceive(instance *Ec2Instance, sources []string, target string) *Pr
 
 	remote = user + "@" + instance.PublicIp
 	for _, source = range sources {
-		operands = append(operands, remote + ":" + source)
+		operands = append(operands, remote+":"+source)
 	}
 	operands = append(operands, target)
 	cmdline = buildScpCmdline(operands)
@@ -182,7 +182,7 @@ func scpReceive(instances *Ec2Selection, paths []string) {
 	var sources []string
 	var lastpos, pos int
 
-	lastpos	= len(paths) - 1
+	lastpos = len(paths) - 1
 	target = paths[lastpos]
 
 	if target[0] == ':' {
@@ -229,7 +229,7 @@ func buildScpSend(instance *Ec2Instance, sources []string, target string) *Proce
 	}
 
 	remote = user + "@" + instance.PublicIp
-	operands = append(sources, remote + ":" + target)
+	operands = append(sources, remote+":"+target)
 	cmdline = buildScpCmdline(operands)
 
 	return NewProcess(cmdline)
@@ -269,7 +269,7 @@ func scpSend(instances *Ec2Selection, paths []string) {
 	var sources []string
 	var lastpos int
 
-	lastpos	= len(paths) - 1
+	lastpos = len(paths) - 1
 	target = paths[lastpos]
 
 	if target[0] == ':' {
