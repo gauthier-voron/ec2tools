@@ -407,6 +407,41 @@ func scpDoSend(instances *Ec2Selection, sources []string, target string) {
 	os.Exit(runProcesses(processes))
 }
 
+// Main for scp in send mode with the specified instances selection and paths
+// arguments.
+// Parse the paths arguments to check if they are valid paths and how to do the
+// send, then process to the send.
+// Assume len(paths) to be at least 1.
+//
+func scpSend(instances *Ec2Selection, paths []string) {
+	var target, source string
+	var sources []string
+	var lastpos int
+
+	lastpos	= len(paths) - 1
+	target = paths[lastpos]
+
+	if target[0] == ':' {
+		sources = paths[0:lastpos]
+		target = target[1:]
+	} else {
+		sources = paths
+		target = ""
+	}
+
+	if len(sources) == 0 {
+		Error("no local path operand")
+	}
+
+	for _, source = range sources {
+		if source[0] == ':' {
+			Error("misplaced remote path operand: '%s'", source)
+		}
+	}
+
+	scpDoSend(instances, sources, target)
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func Scp(args []string) {
