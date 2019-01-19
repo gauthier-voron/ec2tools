@@ -320,6 +320,45 @@ func scpDoReceive(instances *Ec2Selection, sources []string, target string) {
 	os.Exit(runProcesses(processes))
 }
 
+// Main for scp in receive mode with the specified instances selection and
+// paths arguments.
+// Parse the paths arguments to check if they are valid paths and how to do
+// the receive, then process to the receive.
+// Assume len(paths) to be at least 1.
+//
+func scpReceive(instances *Ec2Selection, paths []string) {
+	var target, source string
+	var sources []string
+	var lastpos, pos int
+
+	lastpos	= len(paths) - 1
+	target = paths[lastpos]
+
+	if target[0] == ':' {
+		Error("no local path operand")
+	} else {
+		sources = paths[0:lastpos]
+	}
+
+	if len(sources) == 0 {
+		Error("no remote path operand")
+	}
+
+	for pos, source = range sources {
+		if source[0] != ':' {
+			Error("misplaced local path operand: '%s'", source)
+		} else {
+			sources[pos] = source[1:]
+			if len(sources[pos]) == 0 {
+				Error("invalid remote path operand: '%s'",
+					source)
+			}
+		}
+	}
+
+	scpDoReceive(instances, sources, target)
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func Scp(args []string) {
