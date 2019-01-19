@@ -1,5 +1,9 @@
 package main
 
+import (
+	"strconv"
+)
+
 // The property of a given instance.
 // A property can be either a trait or an attribute.
 // A trait is an inherent and predefined property of the instance, like its
@@ -14,52 +18,69 @@ type Property struct {
 	Instance  *Ec2Instance // instance with this property
 }
 
+// Create a new trait (non attribute) property with the specified Property.Name
+// and Property.Value fields.
+//
+func newTraitProperty(instance *Ec2Instance, name, value string) *Property {
+	var property Property
+
+	property.Defined = true
+	property.Attribute = false
+	property.Name = name
+	property.Value = value
+	property.Instance = instance
+
+	return &property
+}
+
 // Return the fleet name property of the instance.
 //
 func GetFleet(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "fleet", instance.Fleet.Name)
 }
 
 // Return the fleet instance identifier (fiid) property of the instance.
 //
 func GetFiid(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "fiid",
+		strconv.Itoa(instance.FleetIndex))
 }
 
 // Return the name property of the instance (the one given by AWS EC2).
 //
 func GetName(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "name", instance.Name)
 }
 
 // Return the public ip property of the instance.
 //
 func GetPublicIp(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "public-ip", instance.PublicIp)
 }
 
 // Return the private ip property of the instance.
 //
 func GetPrivateIp(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "private-ip", instance.PrivateIp)
 }
 
 // Return the region code property of the instance.
 //
 func GetRegion(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "region", instance.Fleet.Region)
 }
 
 // Return the region code property of the instance.
 //
 func GetUiid(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "uiid",
+		strconv.Itoa(instance.UniqueIndex))
 }
 
 // Return the ssh username property of the instance.
 //
 func GetUser(instance *Ec2Instance) *Property {
-	return nil
+	return newTraitProperty(instance, "user", instance.Fleet.User)
 }
 
 // Return the attribute of the instance with the given name.
