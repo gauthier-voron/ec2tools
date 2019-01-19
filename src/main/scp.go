@@ -196,6 +196,30 @@ func doSend(instances *Ec2Selection, local string) {
 	}
 }
 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Generalistic scp code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Return the scp command line as a string slice with the specified source and
+// target operands (see man scp).
+//
+func buildScpCmdline(operands []string) []string {
+	var cmdline []string = []string{"scp",
+		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
+		"-o", "UserKnownHostsFile=/dev/null", "-r",
+	}
+
+	if *optionVerbose {
+		cmdline = append(cmdline, "-vvv")
+	}
+
+	cmdline = append(cmdline, operands...)
+
+	return cmdline
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 func Scp(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var instances *Ec2Selection
