@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 var DEFAULT_FORCE_SEND bool = false
@@ -447,13 +446,15 @@ func scpSend(instances *Ec2Selection, paths []string) {
 func Scp(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var instances *Ec2Selection
+	var paths []string
 	var specs []string
-	var local, source string
 	var ctx *Ec2Index
+	var hasSpecs bool
+	var arg string
 	var err error
+	var pos int
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
-	optionForceSend = flags.Bool("force-send", DEFAULT_FORCE_SEND, "")
 	optionUser = flags.String("user", "", "")
 	optionVerbose = flags.Bool("verbose", DEFAULT_VERBOSE, "")
 
@@ -461,20 +462,29 @@ func Scp(args []string) {
 	args = flags.Args()
 
 	if len(args) < 1 {
-		Error("missing source-file operand")
+		Error("missing first path operand")
 	}
 
-	local = args[0]
-
-	if strings.Contains(local, "%") && !*optionForceSend {
-		if len(args) < 2 {
-			Error("missing source-file operand")
+	hasSpecs = false
+	for _, arg = range args {
+		if (arg == "--") && !hasSpecs {
+			hasSpecs = true
+			specs = paths
+			paths = make([]string, 0)
+			continue
 		}
-		source = args[1]
-		specs = args[2:]
-	} else {
-		source = ""
-		specs = args[1:]
+
+		paths = append(paths, arg)
+	}
+
+	if len(paths) < 1 {
+		Error("missing first path operand")
+	}
+
+	for pos, arg = range paths {
+		if len(arg) == 0 {
+			Error("invalid empty path operand #%d", pos)
+		}
 	}
 
 	ctx, err = LoadEc2Index(*optionContext)
@@ -482,18 +492,18 @@ func Scp(args []string) {
 		Error("no context: %s", *optionContext)
 	}
 
-	if len(specs) >= 1 {
+	if !hasSpecs {
+		instances, _ = ctx.Select([]string{"//"})
+	} else {
 		instances, err = ctx.Select(specs)
 		if err != nil {
 			Error("invalid specification: %s", err.Error())
 		}
-	} else {
-		instances, _ = ctx.Select([]string{"//"})
 	}
 
-	if source != "" {
-		doReceive(instances, local, source)
+	if paths[0][0] == ':' {
+		scpReceive(instances, paths)
 	} else {
-		doSend(instances, local)
+		scpSend(instances, paths)
 	}
 }
