@@ -218,6 +218,44 @@ func buildScpCmdline(operands []string) []string {
 	return cmdline
 }
 
+// Run a set of Process objects in parallel.
+// If all processes exit with success, return 0.
+// Otherwise, print the stderr of each failed process, prefixed with the
+// corresponding *Ec2Instance (the key of the specified map) and return 1.
+//
+func runProcesses(processes map[*Ec2Instance]*Process) int {
+	var instance *Ec2Instance
+	var exitcode, pcode int
+	var process *Process
+	var line string
+	var found bool
+
+	for _, process = range processes {
+		process.Start()
+	}
+
+	exitcode = 0
+	for instance, process = range processes {
+		process.WaitFinished()
+		pcode, _ = process.ExitCode()
+
+		if pcode != 0 {
+			exitcode = 1
+
+			fmt.Fprintf(os.Stderr, "instance %s failed:\n",
+				instance.Name)
+
+			line, found = process.ReadStderr()
+			for found {
+				fmt.Fprintf(os.Stderr, "  %s", line)
+				line, found = process.ReadStderr()
+			}
+		}
+	}
+
+	return exitcode
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func Scp(args []string) {
