@@ -3,7 +3,7 @@
 set -e
 
 # Create a fake context as we wokr locally
-cp 'test/context-10instances-sydney.json' '.ec2tools'
+cp '../test/context-10instances-sydney.json' '.ec2tools'
 
 # Set a non empty 'test-property' for one instance
 ec2tools set '/^i-0c/' -- 'test-property' 'on'

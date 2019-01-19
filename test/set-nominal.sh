@@ -3,7 +3,7 @@
 set -e
 
 # Create a fake context as we wokr locally
-cp 'test/context-10instances-sydney.json' '.ec2tools'
+cp '../test/context-10instances-sydney.json' '.ec2tools'
 
 # Create a new property 'test-property' different for each instance
 # Test that the property has been set correctly
