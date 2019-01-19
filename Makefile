@@ -36,3 +36,6 @@ clean:
 
 cleanall: clean
 	-rm -rf src/github.com pkg
+
+
+.PHONY: default all check test clean cleanall
