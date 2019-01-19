@@ -88,7 +88,14 @@ func GetUser(instance *Ec2Instance) *Property {
 // Value field set to the empty string and a Defined field set to false.
 //
 func GetAttribute(instance *Ec2Instance, name string) *Property {
-	return nil
+	var property Property
+
+	property.Attribute = true
+	property.Name = name
+	property.Instance = instance
+	property.Value, property.Defined = instance.Attributes[name]
+
+	return &property
 }
 
 // Return the property of the instance with the given name.
