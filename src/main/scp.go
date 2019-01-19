@@ -13,47 +13,43 @@ var DEFAULT_FORCE_SEND bool = false
 var optionForceSend *bool
 
 func PrintScpUsage() {
-	fmt.Printf(`Usage: %s scp [options] <source-file> [ <instance-ids...> ]
-       %s scp [options] <dest-pattern> <source-file> [ <instance-ids...> ]
+	fmt.Printf(`
+Usage: %s scp [options] [ <instance-specifications...> -- ]
+              <local-paths...> [ :<remote-path> ]
+       %s scp [options] [ <instance-specifications...> -- ]
+              :<remote-paths...> <local-pattern>
 
-Copy files from and to remote instances through a secure connection. If the
-first non optional argument contains a format pattern (e.g. '%%i'), then it is
-a destination pattern, otherwise it is a source file.
-If you need to transfer a source file with a '%%' character in its name, use
-the '--force-send' option.
-If no instance id is specified, then copy from or to every instances in the
-context.
+Copy files from and to remote instances through a secure connection.
+If the first path operand starts with a ':' character, operate in receive mode,
+otherwise, operate in send mode.
+
+In send mode, copy one or more local files or directories to the specified
+instances.
+If no path operand starts with a ':', they are all local paths. Send them to
+the home directory on the remote instances.
+If the last path starts with a ':', this is a remote path. Send all the local
+paths to this remote path. If there are more than one local path, the remote
+path must be an existing remote directory.
+
+In receive mode, copy one or more remote files or directories to the paths
+specified by the local pattern.
+If there is more than one remote path, they must all start with a ':'
+character.
+The local pattern is a printf like pattern that get substitued for each
+specified instance (see '%s help format' for more information about patterns).
+The pattern must produce different strings for each instance.
+
+If no instance is specified, apply to all instances.
+
+Return zero if all copies success. Otherwise, return a non zero exit status and
+print failing instances errors.
 
 Options:
   --context <path>            path of the context file (default: '%s')
-  --force-send                consider the first argument as a source file
   --user <user-name>          user to ssh connect to instances (default: contextual)
-  --verbose                   print scp debug output
-
-Format:
-  If the first argument is a destination pattern, then it contains at least one
-  format pattern. A format pattern is a '%%' character followed by a letter
-  just like printf format. The available format patterns are:
-
-    %%d                        the index of the sending instance inside its
-                              fleet
-
-    %%D                        the index of the sending instance among every
-                              fleets
-
-    %%f                        the fleet name of the sending instance
-
-    %%i                        the id of the sending instance
-
-    %%I                        the public IP address of the sending instance
-
-    %%%%                        a non formatted '%%' character
-
-  Each instance transfers a file to its corresponding formatted destination
-  file. If several instances have the same destination file, the result is
-  unspecified.
+  --verbose                   print scp debug output in case of failure
 `,
-		PROGNAME, PROGNAME,
+		PROGNAME, PROGNAME, PROGNAME,
 		DEFAULT_CONTEXT)
 }
 
