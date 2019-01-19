@@ -257,6 +257,70 @@ func runProcesses(processes map[*Ec2Instance]*Process) int {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Scp receive mode related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Return a Process object for the given instance to receive the given source
+// paths to the specified local target.
+// The target is a plain string (and not a format).
+//
+func buildScpReceive(instance *Ec2Instance, sources []string, target string) *Process {
+	var user, remote, source string
+	var operands, cmdline []string
+
+	if *optionUser != "" {
+		user = *optionUser
+	} else {
+		user = instance.Fleet.User
+	}
+
+	remote = user + "@" + instance.PublicIp
+	for _, source = range sources {
+		operands = append(operands, remote + ":" + source)
+	}
+	operands = append(operands, target)
+	cmdline = buildScpCmdline(operands)
+
+	return NewProcess(cmdline)
+}
+
+// Perform the scp receive for the specified instances selection with the
+// given source remote paths and the given target local pattern.
+// This function never returns.
+//
+func scpDoReceive(instances *Ec2Selection, sources []string, target string) {
+	var processes map[*Ec2Instance]*Process
+	var targetPaths map[string]*Ec2Instance
+	var instance, other *Ec2Instance
+	var targetPath string
+	var found bool
+
+	processes = make(map[*Ec2Instance]*Process)
+	targetPaths = make(map[string]*Ec2Instance)
+
+	for _, instance = range instances.Instances {
+		_, found = processes[instance]
+		if found {
+			continue
+		}
+
+		targetPath = Format(target, instance)
+		other, found = targetPaths[targetPath]
+		if found {
+			Error("conflicting target path for instances %s "+
+				"and %s: '%s'", other.Name, instance.Name,
+				targetPath)
+		}
+
+		processes[instance] = buildScpReceive(instance, sources,
+			targetPath)
+		targetPaths[targetPath] = instance
+	}
+
+	os.Exit(runProcesses(processes))
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func Scp(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
