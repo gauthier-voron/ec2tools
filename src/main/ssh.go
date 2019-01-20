@@ -295,6 +295,122 @@ func (this *ReaderTransmitterAllPrefixz) Transmit(to *os.File) {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+// A transmitted for several ssh Process launched in parallel.
+// Merge all the similar lines emitted in parallel and prefix each line
+// version with the number of processes emitting this line.
+//
+type ReaderTransmitterMergeParallelz struct {
+	Mode      bool       // true = stdout | false = stderr
+	Processes []*Process // processes to transmit the lines
+}
+
+// Create a ReaderTransmitterMergeParallel with specified parameters.
+//
+func newReaderTransmitterMergeParallel(processes []*Process, mode bool) *ReaderTransmitterMergeParallelz {
+	var ret ReaderTransmitterMergeParallelz
+
+	ret.Mode = mode
+	ret.Processes = processes
+
+	return &ret
+}
+
+// Create a ReaderTransmitterMergeParallel for the specified processes for the
+// stdout streams.
+//
+func NewReaderTransmitterMergeParallelStdout(processes []*Process) *ReaderTransmitterMergeParallelz {
+	return newReaderTransmitterMergeParallel(processes, true)
+}
+
+// Create a ReaderTransmitterMergeParallel for the specified processes for the
+// stderr streams.
+//
+func NewReaderTransmitterMergeParallelStderr(processes []*Process) *ReaderTransmitterMergeParallelz {
+	return newReaderTransmitterMergeParallel(processes, false)
+}
+
+// Compute the format to use to print lines.
+// The prefix indicating the number of emitting processes must have a fixed
+// size for the whole execution.
+//
+func (this *ReaderTransmitterMergeParallelz) computeFormat() string {
+	var width, buffer int
+	var format string
+
+	width = 1
+	buffer = len(this.Processes)
+
+	for buffer >= 10 {
+		width += 1
+		buffer /= 10
+	}
+
+	format = fmt.Sprintf("%%s[%%%dd/%%%dd] %%s", width, width)
+	return format
+}
+
+// Merge the specified lines to account how many different versions there are
+// and how many occurences for each of them, then print them with the
+// appropriate prefix.
+//
+func (this *ReaderTransmitterMergeParallelz) transmitFormatted(lines []string,
+	to *os.File) {
+	var packedLines map[string]int = make(map[string]int)
+	var line, bufline, format string
+	var count, max int
+
+	for _, line = range lines {
+		packedLines[line] += 1
+	}
+
+	format = this.computeFormat()
+
+	max = len(lines)
+	for line, count = range packedLines {
+		if count == max {
+			bufline = fmt.Sprintf(format, "*", count, max, line)
+		} else {
+			bufline = fmt.Sprintf(format, " ", count, max, line)
+		}
+
+		to.WriteString(bufline)
+	}
+}
+
+// Transmit all the lines of the related processes merged with occurence count
+// displayed.
+//
+func (this *ReaderTransmitterMergeParallelz) Transmit(to *os.File) {
+	var process *Process
+	var lines []string
+	var line string
+	var has bool
+
+	for {
+		lines = make([]string, 0)
+
+		for _, process = range this.Processes {
+			if this.Mode {
+				line, has = process.ReadStdout()
+			} else {
+				line, has = process.ReadStderr()
+			}
+
+			if has {
+				lines = append(lines, string(line))
+			}
+		}
+
+		if len(lines) == 0 {
+			break
+		}
+
+		this.transmitFormatted(lines, to)
+	}
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 func NewReaderTransmitterAllPrefix(instances *Ec2Selection,
 	readers []io.Reader) *ReaderTransmitterAllPrefix {
 	var ret ReaderTransmitterAllPrefix
