@@ -8,6 +8,7 @@ import (
 )
 
 var DEFAULT_DEFINED bool = false
+var DEFAULT_FORMAT bool = false
 var DEFAULT_SORT bool = false
 var DEFAULT_SORT_BY string = ""
 var DEFAULT_UNIQUE_INSTANCES bool = false
@@ -15,6 +16,7 @@ var DEFAULT_UNIQUE_RESULTS bool = false
 var DEFAULT_UPDATE bool = false
 
 var optionDefined *bool
+var optionFormat *bool
 var optionSort *bool
 var optionSortBy *string
 var optionUniqueInstances *bool
@@ -367,6 +369,45 @@ func doGetFleets(idx *Ec2Index) {
 
 	for name = range idx.FleetsByName {
 		fmt.Println(name)
+	}
+}
+
+func doGetProperties(selection *Ec2Selection, propstrs []string) {
+	var lists []*PropertyList = make([]*PropertyList, 0)
+	var instance *Ec2Instance
+	var list *PropertyList
+	var str string
+
+	for _, instance = range selection.Instances {
+		lists = append(lists, NewPropertyList(instance))
+	}
+
+	if *optionUniqueInstances {
+		lists = UniquePropertyListsByInstance(lists)
+	}
+
+	for _, str = range propstrs {
+		for _, list = range lists {
+			if *optionFormat {
+				list.AddFormat(str)
+			} else {
+				list.GetProperty(str)
+			}
+		}
+	}
+
+	if *optionUniqueResults {
+		lists = UniquePropertyListsByString(lists)
+	}
+
+	if *optionSortBy != "" {
+		lists = SortPropertyListByProperty(lists, *optionSortBy)
+	}
+
+	for _, list = range lists {
+		if !*optionDefined || list.IsFullyDefined() {
+			fmt.Println(list.ToString(" "))
+		}
 	}
 }
 
