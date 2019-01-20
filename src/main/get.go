@@ -220,6 +220,78 @@ func (this *PropertyList) ToString(separator string) string {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// PropertyList sort related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Sort the given PropertyList according to a related key, located in the
+// given strs slice at the ame index.
+// Return a new slice of sorted PropertyList.
+//
+func sortPropertyListByStrings(lists []*PropertyList, strs []string) []*PropertyList {
+	var listsByValue map[string][]*PropertyList
+	var sorted []*PropertyList = make([]*PropertyList, 0)
+	var values []string = make([]string, 0)
+	var list *PropertyList
+	var value string
+	var found bool
+	var i int
+
+	listsByValue = make(map[string][]*PropertyList)
+
+	for i, list = range lists {
+		value = strs[i]
+
+		_, found = listsByValue[value]
+
+		if !found {
+			values = append(values, value)
+		}
+
+		listsByValue[value] = append(listsByValue[value], list)
+	}
+
+	sort.Strings(values)
+
+	for _, value = range values {
+		for _, list = range listsByValue[value] {
+			sorted = append(sorted, list)
+		}
+	}
+
+	return sorted
+}
+
+// Sort the given PropertyList depending on the value of their associated
+// Property which the name is specified.
+//
+func SortPropertyListByProperty(lists []*PropertyList, name string) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = GetProperty(list.Instance, name).Value
+	}
+
+	return sortPropertyListByStrings(lists, strs)
+}
+
+// Sort the given PropertyList depending on the value of their concatenated
+// property values or formatted strings.
+//
+func SortPropertyListByString(lists []*PropertyList) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = list.ToString(" ")
+	}
+
+	return sortPropertyListByStrings(lists, strs)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 // Sort the instances inplace depending on the given sortkeys.
 // The lengths of instances.Instances and sortkeys must be the same so for one
