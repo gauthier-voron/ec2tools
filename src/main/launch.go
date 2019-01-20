@@ -34,6 +34,8 @@ var optionTime *string
 var optionType *string
 var optionUser *string
 
+var launchProcOptionTime *Timeout
+
 func PrintLaunchUsage() {
 	fmt.Printf(`Usage: %s launch [options] <fleet-name>
 
@@ -59,97 +61,11 @@ Options:
 		DEFAULT_TIME, DEFAULT_TYPE, DEFAULT_USER)
 }
 
-func timespecToSec(timespec string) int64 {
-	var mode int = 0 // 0 = num/sp, 1 = num, 2 = unit, 3 = sp
-	var defaultMult int64 = 1
-	var acc int64 = 0
-	var ret int64 = 0
-	var c rune
-
-	// mode variation along string walk
-	//
-	// '  12d13  h14m  17   s   '
-	//  001121133211200113332000
-	//
-	// '  h'
-	//  00X
-	//
-	// '13 11'
-	//  113X
-	//
-	// '11hm'
-	//  112X
-	//
-	// '11h  m'
-	//  11200X
-
-	for _, c = range timespec {
-		if (c >= '0') && (c <= '9') {
-			if mode == 3 {
-				return -1
-			} else {
-				mode = 1
-			}
-
-			acc *= 10
-			acc += int64(c) - '0'
-		} else if c == ' ' {
-			if mode == 1 {
-				mode = 3
-			} else if mode == 2 {
-				mode = 0
-			}
-		} else {
-			if (mode == 0) || (mode == 2) {
-				return -1
-			} else {
-				mode = 2
-			}
-
-			switch c {
-			case 'd':
-				ret += acc * 86400
-				defaultMult = 3600
-			case 'h':
-				ret += acc * 3600
-				defaultMult = 60
-			case 'm':
-				ret += acc * 60
-				defaultMult = 1
-			case 's':
-				ret += acc
-				defaultMult = -1
-			default:
-				return -1
-			}
-
-			acc = 0
-		}
-	}
-
-	if acc != 0 {
-		if defaultMult == -1 {
-			return -1
-		} else {
-			ret += acc * defaultMult
-		}
-	}
-
-	return ret
-}
-
 func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	var spec ec2.SpotFleetLaunchSpecification
 	var conf ec2.SpotFleetRequestConfigData
 	var req ec2.RequestSpotFleetInput
-	var until time.Time = time.Now()
-	var tm int64 = timespecToSec(*optionTime)
-
-	if tm < 0 {
-		Error("invalid time specification: '%s'", *optionTime)
-	} else {
-		until = until.Add(time.Duration(tm * 1000000000))
-	}
+	var until time.Time = launchProcOptionTime.DeadlineDate()
 
 	spec.ImageId = optionImage
 	spec.InstanceType = optionType
@@ -213,6 +129,14 @@ func doLaunch(fleetName string) {
 	StoreEc2Index(*optionContext, ctx)
 }
 
+func processLaunchOptionTime() {
+	launchProcOptionTime = NewTimeoutFromSpec(*optionTime)
+
+	if launchProcOptionTime == nil {
+		Error("invalid value for option --time: '%s'", *optionTime)
+	}
+}
+
 func Launch(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var fleetName string
@@ -238,6 +162,8 @@ func Launch(args []string) {
 	}
 
 	fleetName = flags.Args()[0]
+
+	processLaunchOptionTime()
 
 	doLaunch(fleetName)
 }
