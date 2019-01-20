@@ -7,10 +7,6 @@ import (
 	"os"
 )
 
-type ReaderTransmitter interface {
-	Transmit(to *os.File)
-}
-
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
@@ -143,6 +139,20 @@ func (this *SshProcessBuilder) Build() *Process {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Transmitters related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// An object to transmit some infromation to the specified file or stream.
+// Its main purpose is to transmit the streams incoming from an ssh process
+// with appropriate additional information and in the appropriate format.
+//
+type ReaderTransmitter interface {
+	// Transmit to the specified output until there is nothing more to
+	// transmit.
+	// A call may block if the transmitted information comes from a stream.
+	//
+	Transmit(to *os.File)
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 // A transmitted for several ssh Process launched in parallel.
