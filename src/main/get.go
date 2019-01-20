@@ -173,6 +173,20 @@ func (this *PropertyList) GetProperty(name string) {
 	this.Values = append(this.Values, property.Value)
 }
 
+// Indicate if every properties of the list are defined.
+//
+func (this *PropertyList) IsFullyDefined() bool {
+	var property *Property
+
+	for _, property = range this.Properties {
+		if !property.Defined {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Concatenate all the properties and formatted string in a single string,
 // separated by the given string.
 //
