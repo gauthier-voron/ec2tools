@@ -173,6 +173,28 @@ func (this *PropertyList) GetProperty(name string) {
 	this.Values = append(this.Values, property.Value)
 }
 
+// Concatenate all the properties and formatted string in a single string,
+// separated by the given string.
+//
+func (this *PropertyList) ToString(separator string) string {
+	var first bool = true
+	var value, ret string
+
+	ret = ""
+
+	for _, value = range this.Values {
+		if first {
+			first = false
+		} else {
+			ret += separator
+		}
+
+		ret += value
+	}
+
+	return ret
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 // Sort the instances inplace depending on the given sortkeys.
