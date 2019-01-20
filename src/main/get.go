@@ -140,6 +140,32 @@ Examples:
 		PROGNAME, PROGNAME, PROGNAME)
 }
 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// PropertList related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// A list of properties of format associated with an instance.
+//
+type PropertyList struct {
+	Instance   *Ec2Instance // instance with the associated properties
+	Properties []*Property  // properties fetched for the instance
+	Values     []string     // values of properties to show
+}
+
+// Create a new empty PropertyList associated to the given instance.
+//
+func NewPropertyList(instance *Ec2Instance) *PropertyList {
+	var this PropertyList
+
+	this.Instance = instance
+	this.Properties = make([]*Property, 0)
+	this.Values = make([]string, 0)
+
+	return &this
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 // Sort the instances inplace depending on the given sortkeys.
 // The lengths of instances.Instances and sortkeys must be the same so for one
 // instance, there is one sortkey.
