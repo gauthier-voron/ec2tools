@@ -154,8 +154,8 @@ func (this *SshProcessBuilder) User(user string) *SshProcessBuilder {
 	return this
 }
 
-func (this *SshProcessBuilder) Verbose(verbose bool) *SshProcessBuilder {
-	this.verbose = verbose
+func (this *SshProcessBuilder) Verbose() *SshProcessBuilder {
+	this.verbose = true
 	return this
 }
 
