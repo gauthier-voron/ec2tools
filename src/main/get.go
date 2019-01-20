@@ -164,6 +164,15 @@ func NewPropertyList(instance *Ec2Instance) *PropertyList {
 	return &this
 }
 
+// Add a new property with the given name to the list.
+//
+func (this *PropertyList) GetProperty(name string) {
+	var property *Property = GetProperty(this.Instance, name)
+
+	this.Properties = append(this.Properties, property)
+	this.Values = append(this.Values, property.Value)
+}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 // Sort the instances inplace depending on the given sortkeys.
