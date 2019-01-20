@@ -462,7 +462,6 @@ func transmitStreams(instances *Ec2Selection, processes []*Process) {
 		Error("unknown errput mode: '%s'", *optionErrmode)
 	}
 
-
 	go func() {
 		outTransmit.Transmit(os.Stdout)
 		done <- true
@@ -505,7 +504,6 @@ func doSsh(instances *Ec2Selection, cmdline []string) {
 
 		processes[i] = builder.Build()
 	}
-
 
 	for i, _ = range processes {
 		processes[i].Start()
