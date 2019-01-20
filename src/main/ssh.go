@@ -61,38 +61,6 @@ Modes:
 		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
-func buildSshCmdline(instance *Ec2Instance, cmdline []string, timeout *int,
-	verbose bool, user *string) []string {
-
-	var sshuser, dest string
-	var sshcmd []string = []string{"ssh",
-		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
-		"-o", "UserKnownHostsFile=/dev/null",
-	}
-
-	if timeout != nil {
-		sshcmd = append(sshcmd, "-o",
-			fmt.Sprintf("ConnectTimeout=%d", *timeout))
-	}
-
-	if verbose {
-		sshcmd = append(sshcmd, "-vvv")
-	}
-
-	if user != nil {
-		sshuser = *user
-	} else {
-		sshuser = instance.Fleet.User
-	}
-
-	dest = sshuser + "@" + instance.PublicIp
-
-	sshcmd = append(sshcmd, dest)
-	sshcmd = append(sshcmd, cmdline...)
-
-	return sshcmd
-}
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Ssh process related code
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -152,12 +120,33 @@ func (this *SshProcessBuilder) Verbose() *SshProcessBuilder {
 // The returned Process is not started yet.
 //
 func (this *SshProcessBuilder) Build() *Process {
-	var cmdline []string
+	var sshuser, dest string
+	var sshcmd []string = []string{"ssh",
+		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
+		"-o", "UserKnownHostsFile=/dev/null",
+	}
 
-	cmdline = buildSshCmdline(this.instance, this.cmdline, this.timeout,
-		this.verbose, this.user)
+	if this.timeout != nil {
+		sshcmd = append(sshcmd, "-o",
+			fmt.Sprintf("ConnectTimeout=%d", *this.timeout))
+	}
 
-	return NewProcess(cmdline)
+	if this.verbose {
+		sshcmd = append(sshcmd, "-vvv")
+	}
+
+	if this.user != nil {
+		sshuser = *this.user
+	} else {
+		sshuser = this.instance.Fleet.User
+	}
+
+	dest = sshuser + "@" + this.instance.PublicIp
+
+	sshcmd = append(sshcmd, dest)
+	sshcmd = append(sshcmd, this.cmdline...)
+
+	return NewProcess(sshcmd)
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
