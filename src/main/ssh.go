@@ -149,7 +149,7 @@ func (this *SshProcessBuilder) Build() *Process {
 // Transmit the lines from each Process prefixed with the corresponding
 // instance name.
 //
-type ReaderTransmitterAllPrefixz struct {
+type ReaderTransmitterAllPrefix struct {
 	Mode      bool           // true = stdout | false = stderr
 	Instances []*Ec2Instance // instances corresponging to each ssh Process
 	Processes []*Process     // processes to transmit the lines
@@ -158,8 +158,8 @@ type ReaderTransmitterAllPrefixz struct {
 // Create a ReaderTransmitterAllPrefix with specified parameters.
 //
 func newReaderTransmitterAllPrefix(instances *Ec2Selection,
-	processes []*Process, mode bool) *ReaderTransmitterAllPrefixz {
-	var ret ReaderTransmitterAllPrefixz
+	processes []*Process, mode bool) *ReaderTransmitterAllPrefix {
+	var ret ReaderTransmitterAllPrefix
 
 	ret.Mode = mode
 	ret.Instances = instances.Instances
@@ -172,7 +172,7 @@ func newReaderTransmitterAllPrefix(instances *Ec2Selection,
 // processes for the stdout streams.
 //
 func NewReaderTransmitterAllPrefixStdout(instances *Ec2Selection,
-	processes []*Process) *ReaderTransmitterAllPrefixz {
+	processes []*Process) *ReaderTransmitterAllPrefix {
 	return newReaderTransmitterAllPrefix(instances, processes, true)
 }
 
@@ -180,7 +180,7 @@ func NewReaderTransmitterAllPrefixStdout(instances *Ec2Selection,
 // processes for the stderr streams.
 //
 func NewReaderTransmitterAllPrefixStderr(instances *Ec2Selection,
-	processes []*Process) *ReaderTransmitterAllPrefixz {
+	processes []*Process) *ReaderTransmitterAllPrefix {
 	return newReaderTransmitterAllPrefix(instances, processes, false)
 }
 
@@ -188,7 +188,7 @@ func NewReaderTransmitterAllPrefixStderr(instances *Ec2Selection,
 // the specified index.
 // A call is blocking until the transmitted stream is closed.
 //
-func (this *ReaderTransmitterAllPrefixz) transmitInstance(id int, to *os.File) {
+func (this *ReaderTransmitterAllPrefix) transmitInstance(id int, to *os.File) {
 	var instance *Ec2Instance = this.Instances[id]
 	var process *Process = this.Processes[id]
 	var bufline, line string
@@ -218,7 +218,7 @@ func (this *ReaderTransmitterAllPrefixz) transmitInstance(id int, to *os.File) {
 // sequential consistency.
 // Each line is prefixed by the name of the emitting instance.
 //
-func (this *ReaderTransmitterAllPrefixz) Transmit(to *os.File) {
+func (this *ReaderTransmitterAllPrefix) Transmit(to *os.File) {
 	var done chan bool = make(chan bool)
 	var idx int
 
@@ -242,15 +242,15 @@ func (this *ReaderTransmitterAllPrefixz) Transmit(to *os.File) {
 // Merge all the similar lines emitted in parallel and prefix each line
 // version with the number of processes emitting this line.
 //
-type ReaderTransmitterMergeParallelz struct {
+type ReaderTransmitterMergeParallel struct {
 	Mode      bool       // true = stdout | false = stderr
 	Processes []*Process // processes to transmit the lines
 }
 
 // Create a ReaderTransmitterMergeParallel with specified parameters.
 //
-func newReaderTransmitterMergeParallel(processes []*Process, mode bool) *ReaderTransmitterMergeParallelz {
-	var ret ReaderTransmitterMergeParallelz
+func newReaderTransmitterMergeParallel(processes []*Process, mode bool) *ReaderTransmitterMergeParallel {
+	var ret ReaderTransmitterMergeParallel
 
 	ret.Mode = mode
 	ret.Processes = processes
@@ -261,14 +261,14 @@ func newReaderTransmitterMergeParallel(processes []*Process, mode bool) *ReaderT
 // Create a ReaderTransmitterMergeParallel for the specified processes for the
 // stdout streams.
 //
-func NewReaderTransmitterMergeParallelStdout(processes []*Process) *ReaderTransmitterMergeParallelz {
+func NewReaderTransmitterMergeParallelStdout(processes []*Process) *ReaderTransmitterMergeParallel {
 	return newReaderTransmitterMergeParallel(processes, true)
 }
 
 // Create a ReaderTransmitterMergeParallel for the specified processes for the
 // stderr streams.
 //
-func NewReaderTransmitterMergeParallelStderr(processes []*Process) *ReaderTransmitterMergeParallelz {
+func NewReaderTransmitterMergeParallelStderr(processes []*Process) *ReaderTransmitterMergeParallel {
 	return newReaderTransmitterMergeParallel(processes, false)
 }
 
@@ -276,7 +276,7 @@ func NewReaderTransmitterMergeParallelStderr(processes []*Process) *ReaderTransm
 // The prefix indicating the number of emitting processes must have a fixed
 // size for the whole execution.
 //
-func (this *ReaderTransmitterMergeParallelz) computeFormat() string {
+func (this *ReaderTransmitterMergeParallel) computeFormat() string {
 	var width, buffer int
 	var format string
 
@@ -296,7 +296,7 @@ func (this *ReaderTransmitterMergeParallelz) computeFormat() string {
 // and how many occurences for each of them, then print them with the
 // appropriate prefix.
 //
-func (this *ReaderTransmitterMergeParallelz) transmitFormatted(lines []string,
+func (this *ReaderTransmitterMergeParallel) transmitFormatted(lines []string,
 	to *os.File) {
 	var packedLines map[string]int = make(map[string]int)
 	var line, bufline, format string
@@ -323,7 +323,7 @@ func (this *ReaderTransmitterMergeParallelz) transmitFormatted(lines []string,
 // Transmit all the lines of the related processes merged with occurence count
 // displayed.
 //
-func (this *ReaderTransmitterMergeParallelz) Transmit(to *os.File) {
+func (this *ReaderTransmitterMergeParallel) Transmit(to *os.File) {
 	var process *Process
 	var lines []string
 	var line string
@@ -360,7 +360,7 @@ func (this *ReaderTransmitterMergeParallelz) Transmit(to *os.File) {
 // processes.
 // Once this process stdin closes, then close all the processes stdin.
 //
-func taskTransmitStdinz(processes []*Process) {
+func taskTransmitStdin(processes []*Process) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
 	var process *Process
 	var line []byte
@@ -387,7 +387,7 @@ func taskTransmitStdinz(processes []*Process) {
 // If a process has an exit status less than 0 or greater than 255, it is
 // considered as 255.
 //
-func collectExitEagerGreatestz(processes []*Process) int {
+func collectExitEagerGreatest(processes []*Process) int {
 	var process *Process
 	var tmp, max int
 
@@ -451,7 +451,7 @@ func transmitStreams(instances *Ec2Selection, processes []*Process) {
 		done <- true
 	}()
 
-	go taskTransmitStdinz(processes)
+	go taskTransmitStdin(processes)
 
 	<-done
 	<-done
@@ -462,7 +462,7 @@ func transmitStreams(instances *Ec2Selection, processes []*Process) {
 // This function never return but instead exit with the maximum exit code
 // among the launched ssh processes.
 //
-func doSshz(instances *Ec2Selection, cmdline []string) {
+func doSsh(instances *Ec2Selection, cmdline []string) {
 	var processes []*Process = make([]*Process, len(instances.Instances))
 	var builder *SshProcessBuilder
 	var instance *Ec2Instance
@@ -491,7 +491,7 @@ func doSshz(instances *Ec2Selection, cmdline []string) {
 
 	transmitStreams(instances, processes)
 
-	os.Exit(collectExitEagerGreatestz(processes))
+	os.Exit(collectExitEagerGreatest(processes))
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -573,5 +573,5 @@ func Ssh(args []string) {
 		}
 	}
 
-	doSshz(instances, command)
+	doSsh(instances, command)
 }
