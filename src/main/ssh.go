@@ -531,6 +531,34 @@ func (this *ReaderTransmitterMergeParallel) Transmit(to *os.File) {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Ssh process execution related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Read on this process stdin and transmit each line to each of the specified
+// processes.
+// Once this process stdin closes, then close all the processes stdin.
+//
+func taskTransmitStdinz(processes []*Process) {
+	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
+	var process *Process
+	var line []byte
+	var err error
+
+	for {
+		line, err = reader.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+
+		for _, process = range processes {
+			process.WriteStdin(string(line))
+		}
+	}
+
+	for _, process = range processes {
+		process.CloseStdin()
+	}
+}
 
 func taskTransmitStdin(stdins []io.WriteCloser) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
