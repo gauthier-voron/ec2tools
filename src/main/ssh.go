@@ -863,5 +863,5 @@ func Ssh(args []string) {
 		}
 	}
 
-	doSsh(instances, command)
+	doSshz(instances, command)
 }
