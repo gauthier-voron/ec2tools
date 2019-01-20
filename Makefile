@@ -22,7 +22,7 @@ ec2tools: $(EXE_SOURCES)
 	GOPATH=$(PWD) go build -v -o $@ $(filter src/main/%.go, $^)
 
 test: $(ALL_SOURCES)
-	GOPATH=$(PWD) go test $(filter src/main/%.go, $^)
+	GOPATH=$(PWD) go test -v -timeout 10s $(filter src/main/%.go, $^)
 
 
 ec2tools test: $(EXTLIBS_PATH)
@@ -36,3 +36,6 @@ clean:
 
 cleanall: clean
 	-rm -rf src/github.com pkg
+
+
+.PHONY: default all check test clean cleanall

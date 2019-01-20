@@ -193,13 +193,20 @@ run_script() {
     local script="$1" ; shift
     local logfile="$1" ; shift
     local pidfile="$1" ; shift
+    local dirfile="$1" ; shift
+    local dir=$(mktemp -d --suffix='.d' 'test-dir.XXXXXXXXXX')
     local pid
 
-    (
-	PATH=.:"$PATH"
+    echo "$dir" > "$dirfile"
 
-	./"$script" > "$logfile" 2>&1
-    ) &
+    (
+	PATH="$PWD":"$PATH"
+	exedir="$PWD"
+
+	cd "$dir"
+
+	"$exedir"/"$script"
+    ) > "$logfile" 2>&1 &
     pid=$!
 
     echo $pid > "$pidfile"
@@ -260,16 +267,18 @@ account_ret() {
 #
 run_test() {
     local script="$1" ; shift
-    local logfile pidfile pid ret
+    local logfile pidfile pid ret dir
 
     logfile=$(mktemp --suffix='.log' 'test-log.XXXXXXXXXX')
     pidfile=$(mktemp --suffix='.pid' 'test-pid.XXXXXXXXXX')
+    dirfile=$(mktemp --suffix='.dir' 'test-dir.XXXXXXXXXX')
 
     print_test_running "$script" ''
 
-    run_script "$script" "$logfile" "$pidfile"
+    run_script "$script" "$logfile" "$pidfile" "$dirfile"
     pid=$(cat "$pidfile")
-    rm "$pidfile"
+    dir=$(cat "$dirfile")
+    rm "$pidfile" "$dirfile"
 
     wait_script "$pid" 90 "$script"
     ret=$?
@@ -279,6 +288,7 @@ run_test() {
     account_ret "$script" $ret "$logfile"
 
     rm "$logfile"
+    rm -rf "$dir"
 }
 
 
