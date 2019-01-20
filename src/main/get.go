@@ -173,6 +173,16 @@ func (this *PropertyList) GetProperty(name string) {
 	this.Values = append(this.Values, property.Value)
 }
 
+// Add a new formatted string to the list.
+//
+func (this *PropertyList) AddFormat(pattern string) {
+	var property *Property = GetProperty(this.Instance, "uiid")
+	var value string = Format(pattern, this.Instance)
+
+	this.Properties = append(this.Properties, property)
+	this.Values = append(this.Values, value)
+}
+
 // Indicate if every properties of the list are defined.
 //
 func (this *PropertyList) IsFullyDefined() bool {
