@@ -635,6 +635,45 @@ func transmitStreams(instances *Ec2Selection, processes []*Process) {
 	<-done
 }
 
+// Execute the given command line on the instances of the given selection
+// through ssh.
+// This function never return but instead exit with the maximum exit code
+// among the launched ssh processes.
+//
+func doSshz(instances *Ec2Selection, cmdline []string) {
+	var processes []*Process = make([]*Process, len(instances.Instances))
+	var builder *SshProcessBuilder
+	var instance *Ec2Instance
+	var i int
+
+	for i, instance = range instances.Instances {
+		builder = BuildSshProcess(instance, cmdline)
+
+		if *optionTimeout >= 0 {
+			builder.Timeout(int(*optionTimeout))
+		}
+		if *optionUser != "" {
+			builder.User(*optionUser)
+		}
+		if *optionVerbose {
+			builder.Verbose()
+		}
+
+		processes[i] = builder.Build()
+	}
+
+
+	for i, _ = range processes {
+		processes[i].Start()
+	}
+
+	transmitStreams(instances, processes)
+
+	os.Exit(collectExitEagerGreatestz(processes))
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 func taskTransmitStdin(stdins []io.WriteCloser) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
 	var stdin io.WriteCloser
