@@ -704,17 +704,16 @@ func getInstancesProperty(instances *Ec2Selection, property string) ([]string, [
 
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var results, sortkeys, specs, properties, defresults []string
+	var specs, propstrs []string
 	var instances *Ec2Selection
-	var hasSpecs, defined bool
-	var arg, result string
-	var defineds []bool
-	var idx *Ec2Index
+	var ctx *Ec2Index
+	var hasSpecs bool
+	var arg string
 	var err error
-	var i int
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionDefined = flags.Bool("defined", DEFAULT_DEFINED, "")
+	optionFormat = flags.Bool("format", DEFAULT_FORMAT, "")
 	optionSort = flags.Bool("sort", DEFAULT_SORT, "")
 	optionSortBy = flags.String("sort-by", DEFAULT_SORT_BY, "")
 	optionUniqueInstances = flags.Bool("unique-instances", DEFAULT_UNIQUE_INSTANCES, "")
@@ -729,87 +728,54 @@ func Get(args []string) {
 	}
 
 	hasSpecs = false
-	specs = []string{"//"}
-	properties = make([]string, 0)
-
 	for _, arg = range args {
 		if (arg == "--") && !hasSpecs {
 			hasSpecs = true
-			specs = properties
-			properties = make([]string, 0)
+			specs = propstrs
+			propstrs = make([]string, 0)
 			continue
 		}
 
-		properties = append(properties, arg)
+		propstrs = append(propstrs, arg)
 	}
 
-	if len(properties) < 1 {
+	if len(propstrs) < 1 {
 		Error("missing property operand")
-	} else if len(properties) > 1 {
-		Error("too many property operands")
-	} else if len(specs) < 1 {
-		Error("missing instance-spec operand")
 	}
 
-	if *optionSort {
-		if *optionSortBy != DEFAULT_SORT_BY {
-			Error("options 'sort' and 'sort-by' are exclusives")
-		} else {
-			*optionSortBy = "uiid"
-		}
-	}
-
-	idx, err = LoadEc2Index(*optionContext)
+	ctx, err = LoadEc2Index(*optionContext)
 	if err != nil {
 		Error("no context: %s", *optionContext)
 	}
 
-	if *optionUpdate {
-		UpdateContext(idx)
-		StoreEc2Index(*optionContext, idx)
+	if *optionSort {
+		*optionSortBy = "uiid"
 	}
 
-	if args[0] == "fleets" {
-		if hasSpecs {
-			Error("unexpected instance-spec operand")
+	if propstrs[0] == "fleets" {
+		if len(propstrs) > 1 {
+			Error("unexpected operand: '%s'", propstrs[1])
+		} else if hasSpecs {
+			Error("unexpected instance specification: '%s'",
+				specs[0])
 		}
-		results = GetAllFleets(idx)
+
+		doGetFleets(ctx)
 	} else {
-		instances, err = idx.Select(specs)
-		if err != nil {
-			Error("invalid specification: %s", err.Error())
+		if *optionUpdate {
+			UpdateContext(ctx)
+			StoreEc2Index(*optionContext, ctx)
 		}
 
-		if *optionUniqueInstances {
-			uniqueInstances(instances)
-		}
-
-		if *optionSortBy != "" {
-			sortkeys, _ = getInstancesProperty(instances,
-				*optionSortBy)
-
-			sortInstances(instances, sortkeys)
-		}
-
-		results, defineds = getInstancesProperty(instances, properties[0])
-
-		if *optionDefined {
-			defresults = make([]string, 0)
-			for i, defined = range defineds {
-				if defined {
-					defresults =
-						append(defresults, results[i])
-				}
+		if !hasSpecs {
+			instances, _ = ctx.Select([]string{"//"})
+		} else {
+			instances, err = ctx.Select(specs)
+			if err != nil {
+				Error("invalid specification: %s", err.Error())
 			}
-			results = defresults
 		}
-	}
 
-	if *optionUniqueResults {
-		results = uniqueResults(results)
-	}
-
-	for _, result = range results {
-		fmt.Println(result)
+		doGetProperties(instances, propstrs)
 	}
 }
