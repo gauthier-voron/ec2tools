@@ -560,6 +560,33 @@ func taskTransmitStdinz(processes []*Process) {
 	}
 }
 
+// Collect the exit status of all the specified processes and return the max
+// of them.
+// If a process has an exit status less than 0 or greater than 255, it is
+// considered as 255.
+//
+func collectExitEagerGreatestz(processes []*Process) int {
+	var process *Process
+	var tmp, max int
+
+	max = 0
+
+	for _, process = range processes {
+		process.WaitFinished()
+
+		tmp, _ = process.ExitCode()
+		if (tmp < 0) || (tmp > 255) {
+			tmp = 255
+		}
+
+		if tmp > max {
+			max = tmp
+		}
+	}
+
+	return max
+}
+
 func taskTransmitStdin(stdins []io.WriteCloser) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
 	var stdin io.WriteCloser
