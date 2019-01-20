@@ -93,6 +93,14 @@ func buildSshCmdline(instance *Ec2Instance, cmdline []string, timeout *int,
 	return sshcmd
 }
 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Ssh process related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Builder for an ssh Process.
+// Store temporary configuration for the process to build.
+// When the configuration is done, use it to create the Process.
+//
 type SshProcessBuilder struct {
 	instance *Ec2Instance // remote instance to execute on
 	cmdline  []string     // command to execute on remote instance
@@ -101,6 +109,10 @@ type SshProcessBuilder struct {
 	verbose  bool         // enable verbose mode
 }
 
+// Create a new SshProcessBuilder for the specified instance and doing the
+// specified command line.
+// The optional values receive their default values.
+//
 func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder {
 	var this SshProcessBuilder
 
@@ -113,21 +125,32 @@ func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder
 	return &this
 }
 
+// Set the timeout to the specified number of seconds.
+// The given number of seconds must be strictly positive.
+//
 func (this *SshProcessBuilder) Timeout(timeout int) *SshProcessBuilder {
 	this.timeout = &timeout
 	return this
 }
 
+// Set the ssh username to the specified string.
+// The given username must be a non empty string.
+//
 func (this *SshProcessBuilder) User(user string) *SshProcessBuilder {
 	this.user = &user
 	return this
 }
 
+// Set the ssh process to verbose mode.
+//
 func (this *SshProcessBuilder) Verbose() *SshProcessBuilder {
 	this.verbose = true
 	return this
 }
 
+// Build an ssh Process based on this configuration.
+// The returned Process is not started yet.
+//
 func (this *SshProcessBuilder) Build() *Process {
 	var cmdline []string
 
