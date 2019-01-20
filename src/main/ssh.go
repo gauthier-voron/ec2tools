@@ -2,41 +2,10 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
-	"syscall"
-	"time"
 )
-
-type sshInstanceContext struct {
-	fleet      string
-	ip         string
-	user       string
-	fleetIndex int
-	totalIndex int
-}
-
-type sshContext struct {
-	instances map[string]*sshInstanceContext
-}
-
-type ReaderTransmitter interface {
-	Transmit(to *os.File)
-}
-
-type ReaderTransmitterAllPrefix struct {
-	Instances []*Ec2Instance
-	Readers   []io.Reader
-}
-
-type ReaderTransmitterMergeParallel struct {
-	Instances []*Ec2Instance
-	Readers   []io.Reader
-}
 
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
@@ -51,7 +20,7 @@ var optionTimeout *int64
 var optionVerbose *bool
 
 func PrintSshUsage() {
-	fmt.Printf(`Usage: %s ssh [options] [ <instance-ids...> '--' ] <cmd> [ <args...> ]
+	fmt.Printf(`Usage: %s ssh [options] [ <instance-specs...> '--' ] <cmd> [ <args...> ]
 
 Open an ssh connection with one or many instances and launch commands on them.
 If no instance is specified, then launch the command on every instances.
@@ -92,38 +61,14 @@ Modes:
 		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
-func buildSshCmdline(instance *Ec2Instance, cmdline []string, timeout *int,
-	verbose bool, user *string) []string {
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Ssh process related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-	var sshuser, dest string
-	var sshcmd []string = []string{"ssh",
-		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
-		"-o", "UserKnownHostsFile=/dev/null",
-	}
-
-	if timeout != nil {
-		sshcmd = append(sshcmd, "-o",
-			fmt.Sprintf("ConnectTimeout=%d", *timeout))
-	}
-
-	if verbose {
-		sshcmd = append(sshcmd, "-vvv")
-	}
-
-	if user != nil {
-		sshuser = *user
-	} else {
-		sshuser = instance.Fleet.User
-	}
-
-	dest = sshuser + "@" + instance.PublicIp
-
-	sshcmd = append(sshcmd, dest)
-	sshcmd = append(sshcmd, cmdline...)
-
-	return sshcmd
-}
-
+// Builder for an ssh Process.
+// Store temporary configuration for the process to build.
+// When the configuration is done, use it to create the Process.
+//
 type SshProcessBuilder struct {
 	instance *Ec2Instance // remote instance to execute on
 	cmdline  []string     // command to execute on remote instance
@@ -132,6 +77,10 @@ type SshProcessBuilder struct {
 	verbose  bool         // enable verbose mode
 }
 
+// Create a new SshProcessBuilder for the specified instance and doing the
+// specified command line.
+// The optional values receive their default values.
+//
 func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder {
 	var this SshProcessBuilder
 
@@ -144,88 +93,142 @@ func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder
 	return &this
 }
 
+// Set the timeout to the specified number of seconds.
+// The given number of seconds must be strictly positive.
+//
 func (this *SshProcessBuilder) Timeout(timeout int) *SshProcessBuilder {
 	this.timeout = &timeout
 	return this
 }
 
+// Set the ssh username to the specified string.
+// The given username must be a non empty string.
+//
 func (this *SshProcessBuilder) User(user string) *SshProcessBuilder {
 	this.user = &user
 	return this
 }
 
-func (this *SshProcessBuilder) Verbose(verbose bool) *SshProcessBuilder {
-	this.verbose = verbose
+// Set the ssh process to verbose mode.
+//
+func (this *SshProcessBuilder) Verbose() *SshProcessBuilder {
+	this.verbose = true
 	return this
 }
 
+// Build an ssh Process based on this configuration.
+// The returned Process is not started yet.
+//
 func (this *SshProcessBuilder) Build() *Process {
-	var cmdline []string
-
-	cmdline = buildSshCmdline(this.instance, this.cmdline, this.timeout,
-		this.verbose, this.user)
-
-	return NewProcess(cmdline)
-}
-
-func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
-	var cmd *exec.Cmd
-	var cctx context.Context
-	var sshcmd []string
-	var verbose bool = *optionVerbose
-	var timeout *int = nil
-	var user *string = nil
-	var itimeout int
-
-	if *optionTimeout >= 0 {
-		itimeout = int(*optionTimeout)
-		timeout = &itimeout
-	}
-	if *optionUser != "" {
-		user = optionUser
+	var sshuser, dest string
+	var sshcmd []string = []string{"ssh",
+		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
+		"-o", "UserKnownHostsFile=/dev/null",
 	}
 
-	sshcmd = buildSshCmdline(instance, command, timeout, verbose, user)
+	if this.timeout != nil {
+		sshcmd = append(sshcmd, "-o",
+			fmt.Sprintf("ConnectTimeout=%d", *this.timeout))
+	}
 
-	if *optionTimeout < 0 {
-		cmd = exec.Command(sshcmd[0], sshcmd[1:]...)
+	if this.verbose {
+		sshcmd = append(sshcmd, "-vvv")
+	}
+
+	if this.user != nil {
+		sshuser = *this.user
 	} else {
-		cctx, _ = context.WithTimeout(context.Background(),
-			time.Duration(*optionTimeout)*time.Second)
-		cmd = exec.CommandContext(cctx, sshcmd[0], sshcmd[1:]...)
+		sshuser = this.instance.Fleet.User
 	}
 
-	return cmd
+	dest = sshuser + "@" + this.instance.PublicIp
+
+	sshcmd = append(sshcmd, dest)
+	sshcmd = append(sshcmd, this.cmdline...)
+
+	return NewProcess(sshcmd)
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Transmitters related code
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-func NewReaderTransmitterAllPrefix(instances *Ec2Selection,
-	readers []io.Reader) *ReaderTransmitterAllPrefix {
+// An object to transmit some infromation to the specified file or stream.
+// Its main purpose is to transmit the streams incoming from an ssh process
+// with appropriate additional information and in the appropriate format.
+//
+type ReaderTransmitter interface {
+	// Transmit to the specified output until there is nothing more to
+	// transmit.
+	// A call may block if the transmitted information comes from a stream.
+	//
+	Transmit(to *os.File)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// A transmitted for several ssh Process launched in parallel.
+// Transmit the lines from each Process prefixed with the corresponding
+// instance name.
+//
+type ReaderTransmitterAllPrefix struct {
+	Mode      bool           // true = stdout | false = stderr
+	Instances []*Ec2Instance // instances corresponging to each ssh Process
+	Processes []*Process     // processes to transmit the lines
+}
+
+// Create a ReaderTransmitterAllPrefix with specified parameters.
+//
+func newReaderTransmitterAllPrefix(instances *Ec2Selection,
+	processes []*Process, mode bool) *ReaderTransmitterAllPrefix {
 	var ret ReaderTransmitterAllPrefix
 
+	ret.Mode = mode
 	ret.Instances = instances.Instances
-	ret.Readers = readers
+	ret.Processes = processes
 
 	return &ret
 }
 
+// Create a ReaderTransmitterAllPrefix for the specified instances and
+// processes for the stdout streams.
+//
+func NewReaderTransmitterAllPrefixStdout(instances *Ec2Selection,
+	processes []*Process) *ReaderTransmitterAllPrefix {
+	return newReaderTransmitterAllPrefix(instances, processes, true)
+}
+
+// Create a ReaderTransmitterAllPrefix for the specified instances and
+// processes for the stderr streams.
+//
+func NewReaderTransmitterAllPrefixStderr(instances *Ec2Selection,
+	processes []*Process) *ReaderTransmitterAllPrefix {
+	return newReaderTransmitterAllPrefix(instances, processes, false)
+}
+
+// Transmit all lines comming from the process (and the related instance) with
+// the specified index.
+// A call is blocking until the transmitted stream is closed.
+//
 func (this *ReaderTransmitterAllPrefix) transmitInstance(id int, to *os.File) {
-	var reader *bufio.Reader = bufio.NewReader(this.Readers[id])
 	var instance *Ec2Instance = this.Instances[id]
-	var bufline string
-	var line []byte
+	var process *Process = this.Processes[id]
+	var bufline, line string
 	var err error
+	var has bool
 
 	for {
-		line, err = reader.ReadBytes('\n')
-		if err != nil {
+		if this.Mode {
+			line, has = process.ReadStdout()
+		} else {
+			line, has = process.ReadStderr()
+		}
+
+		if !has {
 			break
 		}
 
-		bufline = fmt.Sprintf("[%s] %s", instance.Name, string(line))
+		bufline = fmt.Sprintf("[%s] %s", instance.Name, line)
 		_, err = to.WriteString(bufline)
 		if err != nil {
 			break
@@ -233,6 +236,10 @@ func (this *ReaderTransmitterAllPrefix) transmitInstance(id int, to *os.File) {
 	}
 }
 
+// Transmit all the lines of the related instances and processes with
+// sequential consistency.
+// Each line is prefixed by the name of the emitting instance.
+//
 func (this *ReaderTransmitterAllPrefix) Transmit(to *os.File) {
 	var done chan bool = make(chan bool)
 	var idx int
@@ -251,20 +258,52 @@ func (this *ReaderTransmitterAllPrefix) Transmit(to *os.File) {
 	close(done)
 }
 
-func NewReaderTransmitterMergeParallel(readers []io.Reader) *ReaderTransmitterMergeParallel {
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// A transmitted for several ssh Process launched in parallel.
+// Merge all the similar lines emitted in parallel and prefix each line
+// version with the number of processes emitting this line.
+//
+type ReaderTransmitterMergeParallel struct {
+	Mode      bool       // true = stdout | false = stderr
+	Processes []*Process // processes to transmit the lines
+}
+
+// Create a ReaderTransmitterMergeParallel with specified parameters.
+//
+func newReaderTransmitterMergeParallel(processes []*Process, mode bool) *ReaderTransmitterMergeParallel {
 	var ret ReaderTransmitterMergeParallel
 
-	ret.Readers = readers
+	ret.Mode = mode
+	ret.Processes = processes
 
 	return &ret
 }
 
+// Create a ReaderTransmitterMergeParallel for the specified processes for the
+// stdout streams.
+//
+func NewReaderTransmitterMergeParallelStdout(processes []*Process) *ReaderTransmitterMergeParallel {
+	return newReaderTransmitterMergeParallel(processes, true)
+}
+
+// Create a ReaderTransmitterMergeParallel for the specified processes for the
+// stderr streams.
+//
+func NewReaderTransmitterMergeParallelStderr(processes []*Process) *ReaderTransmitterMergeParallel {
+	return newReaderTransmitterMergeParallel(processes, false)
+}
+
+// Compute the format to use to print lines.
+// The prefix indicating the number of emitting processes must have a fixed
+// size for the whole execution.
+//
 func (this *ReaderTransmitterMergeParallel) computeFormat() string {
 	var width, buffer int
 	var format string
 
 	width = 1
-	buffer = len(this.Readers)
+	buffer = len(this.Processes)
 
 	for buffer >= 10 {
 		width += 1
@@ -275,6 +314,10 @@ func (this *ReaderTransmitterMergeParallel) computeFormat() string {
 	return format
 }
 
+// Merge the specified lines to account how many different versions there are
+// and how many occurences for each of them, then print them with the
+// appropriate prefix.
+//
 func (this *ReaderTransmitterMergeParallel) transmitFormatted(lines []string,
 	to *os.File) {
 	var packedLines map[string]int = make(map[string]int)
@@ -299,22 +342,32 @@ func (this *ReaderTransmitterMergeParallel) transmitFormatted(lines []string,
 	}
 }
 
+// Transmit all the lines of the related processes merged with occurence count
+// displayed.
+//
 func (this *ReaderTransmitterMergeParallel) Transmit(to *os.File) {
-	var bufreader *bufio.Reader
-	var reader io.Reader
+	var process *Process
 	var lines []string
-	var line []byte
-	var err error
+	var line string
+	var has bool
 
 	for {
 		lines = make([]string, 0)
 
-		for _, reader = range this.Readers {
-			bufreader = bufio.NewReader(reader)
-			line, err = bufreader.ReadBytes('\n')
-			if err == nil {
+		for _, process = range this.Processes {
+			if this.Mode {
+				line, has = process.ReadStdout()
+			} else {
+				line, has = process.ReadStderr()
+			}
+
+			if has {
 				lines = append(lines, string(line))
 			}
+		}
+
+		if len(lines) == 0 {
+			break
 		}
 
 		this.transmitFormatted(lines, to)
@@ -322,10 +375,16 @@ func (this *ReaderTransmitterMergeParallel) Transmit(to *os.File) {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Ssh process execution related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-func taskTransmitStdin(stdins []io.WriteCloser) {
+// Read on this process stdin and transmit each line to each of the specified
+// processes.
+// Once this process stdin closes, then close all the processes stdin.
+//
+func taskTransmitStdin(processes []*Process) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
-	var stdin io.WriteCloser
+	var process *Process
 	var line []byte
 	var err error
 
@@ -335,36 +394,33 @@ func taskTransmitStdin(stdins []io.WriteCloser) {
 			break
 		}
 
-		for _, stdin = range stdins {
-			stdin.Write(line)
+		for _, process = range processes {
+			process.WriteStdin(string(line))
 		}
 	}
 
-	for _, stdin = range stdins {
-		stdin.Close()
+	for _, process = range processes {
+		process.CloseStdin()
 	}
 }
 
-func collectExitEagerGreatest(cmds []*exec.Cmd) int {
-	var exerr *exec.ExitError
-	var cmd *exec.Cmd
+// Collect the exit status of all the specified processes and return the max
+// of them.
+// If a process has an exit status less than 0 or greater than 255, it is
+// considered as 255.
+//
+func collectExitEagerGreatest(processes []*Process) int {
+	var process *Process
 	var tmp, max int
-	var err error
 
 	max = 0
 
-	for _, cmd = range cmds {
-		err = cmd.Wait()
-		if err == nil {
-			continue
-		}
+	for _, process = range processes {
+		process.WaitFinished()
 
-		switch err.(type) {
-		case *exec.ExitError:
-			exerr = err.(*exec.ExitError)
-			tmp = exerr.Sys().(syscall.WaitStatus).ExitStatus()
-		default:
-			tmp = 256
+		tmp, _ = process.ExitCode()
+		if (tmp < 0) || (tmp > 255) {
+			tmp = 255
 		}
 
 		if tmp > max {
@@ -375,65 +431,90 @@ func collectExitEagerGreatest(cmds []*exec.Cmd) int {
 	return max
 }
 
-func doSsh(instances *Ec2Selection, command []string) {
-	var length int = len(instances.Instances)
-	var stdouts []io.Reader = make([]io.Reader, length)
-	var stderrs []io.Reader = make([]io.Reader, length)
-	var stdins []io.WriteCloser = make([]io.WriteCloser, length)
-	var cmds []*exec.Cmd = make([]*exec.Cmd, length)
+// Transmit the input and output streams of the given processes, related to
+// the specified instances.
+// The transmission occurs accoring to the '--output-mode' and '--error-mode'
+// options.
+// Return when there is nothing more to transmit from the processes stdout and
+// stderr.
+//
+func transmitStreams(instances *Ec2Selection, processes []*Process) {
+	var done chan bool = make(chan bool)
 	var outTransmit, errTransmit ReaderTransmitter
-	var instance *Ec2Instance
-	var err error
-	var idx int
-
-	for idx, instance = range instances.Instances {
-		cmds[idx] = buildCommand(instance, command)
-
-		stdins[idx], err = cmds[idx].StdinPipe()
-		if err != nil {
-			Error("cannot prepare command '%s'\n", command)
-		}
-
-		stdouts[idx], err = cmds[idx].StdoutPipe()
-		if err != nil {
-			Error("cannot prepare command '%s'\n", command)
-		}
-
-		stderrs[idx], err = cmds[idx].StderrPipe()
-		if err != nil {
-			Error("cannot prepare command '%s'\n", command)
-		}
-	}
-
-	for idx, _ = range instances.Instances {
-		err = cmds[idx].Start()
-		if err != nil {
-			Error("cannot launch command '%s'\n", command)
-		}
-	}
 
 	if *optionOutmode == "all-prefix" {
-		outTransmit = NewReaderTransmitterAllPrefix(instances, stdouts)
+		outTransmit = NewReaderTransmitterAllPrefixStdout(instances,
+			processes)
 	} else if *optionOutmode == "merge-parallel" {
-		outTransmit = NewReaderTransmitterMergeParallel(stdouts)
+		outTransmit =
+			NewReaderTransmitterMergeParallelStdout(processes)
 	} else {
 		Error("unknown output mode: '%s'", *optionOutmode)
 	}
 
 	if *optionErrmode == "all-prefix" {
-		errTransmit = NewReaderTransmitterAllPrefix(instances, stderrs)
+		errTransmit = NewReaderTransmitterAllPrefixStderr(instances,
+			processes)
 	} else if *optionErrmode == "merge-parallel" {
-		errTransmit = NewReaderTransmitterMergeParallel(stderrs)
+		errTransmit =
+			NewReaderTransmitterMergeParallelStderr(processes)
 	} else {
 		Error("unknown errput mode: '%s'", *optionErrmode)
 	}
 
-	go outTransmit.Transmit(os.Stdout)
-	go errTransmit.Transmit(os.Stderr)
-	go taskTransmitStdin(stdins)
+	go func() {
+		outTransmit.Transmit(os.Stdout)
+		done <- true
+	}()
 
-	os.Exit(collectExitEagerGreatest(cmds))
+	go func() {
+		errTransmit.Transmit(os.Stderr)
+		done <- true
+	}()
+
+	go taskTransmitStdin(processes)
+
+	<-done
+	<-done
 }
+
+// Execute the given command line on the instances of the given selection
+// through ssh.
+// This function never return but instead exit with the maximum exit code
+// among the launched ssh processes.
+//
+func doSsh(instances *Ec2Selection, cmdline []string) {
+	var processes []*Process = make([]*Process, len(instances.Instances))
+	var builder *SshProcessBuilder
+	var instance *Ec2Instance
+	var i int
+
+	for i, instance = range instances.Instances {
+		builder = BuildSshProcess(instance, cmdline)
+
+		if *optionTimeout >= 0 {
+			builder.Timeout(int(*optionTimeout))
+		}
+		if *optionUser != "" {
+			builder.User(*optionUser)
+		}
+		if *optionVerbose {
+			builder.Verbose()
+		}
+
+		processes[i] = builder.Build()
+	}
+
+	for i, _ = range processes {
+		processes[i].Start()
+	}
+
+	transmitStreams(instances, processes)
+
+	os.Exit(collectExitEagerGreatest(processes))
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func checkStreamMode(mode string) bool {
 	if mode == "all-prefix" {
