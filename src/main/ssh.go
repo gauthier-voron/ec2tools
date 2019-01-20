@@ -202,6 +202,99 @@ func buildCommand(instance *Ec2Instance, command []string) *exec.Cmd {
 // Transmitters related code
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+// A transmitted for several ssh Process launched in parallel.
+// Transmit the lines from each Process prefixed with the corresponding
+// instance name.
+//
+type ReaderTransmitterAllPrefixz struct {
+	Mode      bool           // true = stdout | false = stderr
+	Instances []*Ec2Instance // instances corresponging to each ssh Process
+	Processes []*Process     // processes to transmit the lines
+}
+
+// Create a ReaderTransmitterAllPrefix with specified parameters.
+//
+func newReaderTransmitterAllPrefix(instances *Ec2Selection,
+	processes []*Process, mode bool) *ReaderTransmitterAllPrefixz {
+	var ret ReaderTransmitterAllPrefixz
+
+	ret.Mode = mode
+	ret.Instances = instances.Instances
+	ret.Processes = processes
+
+	return &ret
+}
+
+// Create a ReaderTransmitterAllPrefix for the specified instances and
+// processes for the stdout streams.
+//
+func NewReaderTransmitterAllPrefixStdout(instances *Ec2Selection,
+	processes []*Process) *ReaderTransmitterAllPrefixz {
+	return newReaderTransmitterAllPrefix(instances, processes, true)
+}
+
+// Create a ReaderTransmitterAllPrefix for the specified instances and
+// processes for the stderr streams.
+//
+func NewReaderTransmitterAllPrefixStderr(instances *Ec2Selection,
+	processes []*Process) *ReaderTransmitterAllPrefixz {
+	return newReaderTransmitterAllPrefix(instances, processes, false)
+}
+
+// Transmit all lines comming from the process (and the related instance) with
+// the specified index.
+// A call is blocking until the transmitted stream is closed.
+//
+func (this *ReaderTransmitterAllPrefixz) transmitInstance(id int, to *os.File) {
+	var instance *Ec2Instance = this.Instances[id]
+	var process *Process = this.Processes[id]
+	var bufline, line string
+	var err error
+	var has bool
+
+	for {
+		if this.Mode {
+			line, has = process.ReadStdout()
+		} else {
+			line, has = process.ReadStderr()
+		}
+
+		if !has {
+			break
+		}
+
+		bufline = fmt.Sprintf("[%s] %s", instance.Name, line)
+		_, err = to.WriteString(bufline)
+		if err != nil {
+			break
+		}
+	}
+}
+
+// Transmit all the lines of the related instances and processes with
+// sequential consistency.
+// Each line is prefixed by the name of the emitting instance.
+//
+func (this *ReaderTransmitterAllPrefixz) Transmit(to *os.File) {
+	var done chan bool = make(chan bool)
+	var idx int
+
+	for idx = range this.Instances {
+		go func(i int) {
+			this.transmitInstance(i, to)
+			done <- true
+		}(idx)
+	}
+
+	for _ = range this.Instances {
+		<-done
+	}
+
+	close(done)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 func NewReaderTransmitterAllPrefix(instances *Ec2Selection,
 	readers []io.Reader) *ReaderTransmitterAllPrefix {
 	var ret ReaderTransmitterAllPrefix
