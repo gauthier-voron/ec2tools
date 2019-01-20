@@ -20,7 +20,7 @@ var optionTimeout *int64
 var optionVerbose *bool
 
 func PrintSshUsage() {
-	fmt.Printf(`Usage: %s ssh [options] [ <instance-ids...> '--' ] <cmd> [ <args...> ]
+	fmt.Printf(`Usage: %s ssh [options] [ <instance-specs...> '--' ] <cmd> [ <args...> ]
 
 Open an ssh connection with one or many instances and launch commands on them.
 If no instance is specified, then launch the command on every instances.
