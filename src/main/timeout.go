@@ -168,5 +168,5 @@ func (this *Timeout) IsOver() bool {
 		return false
 	}
 
-	return (this.RemainingSeconds() > 0)
+	return (this.RemainingSeconds() == 0)
 }
