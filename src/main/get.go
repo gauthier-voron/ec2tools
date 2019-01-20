@@ -359,6 +359,18 @@ func UniquePropertyListsByString(lists []*PropertyList) []*PropertyList {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Main routines code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func doGetFleets(idx *Ec2Index) {
+	var name string
+
+	for name = range idx.FleetsByName {
+		fmt.Println(name)
+	}
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 // Sort the instances inplace depending on the given sortkeys.
 // The lengths of instances.Instances and sortkeys must be the same so for one
