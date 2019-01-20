@@ -59,6 +59,7 @@ func NewTimeoutFromSec(sec int) *Timeout {
 func NewTimeoutFromSpec(spec string) *Timeout {
 	var mode int = 0 // 0 = num/sp, 1 = num, 2 = unit, 3 = sp
 	var defaultMult int = 1
+	var empty bool = true
 	var acc int = 0
 	var ret int = 0
 	var c rune
@@ -90,6 +91,7 @@ func NewTimeoutFromSpec(spec string) *Timeout {
 
 			acc *= 10
 			acc += int(c) - '0'
+			empty = false
 		} else if c == ' ' {
 			if mode == 1 {
 				mode = 3
@@ -122,6 +124,10 @@ func NewTimeoutFromSpec(spec string) *Timeout {
 
 			acc = 0
 		}
+	}
+
+	if empty {
+		return nil
 	}
 
 	if acc != 0 {
