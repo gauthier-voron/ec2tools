@@ -23,15 +23,39 @@ var optionUpdate *bool
 
 func PrintGetUsage() {
 	fmt.Printf(`Usage: %s get [options] fleets
-       %s get [options] [<instances-specification...> --] <property>
+       %s get [options] [<instances-specification...> --] <properties...>
 
 Print information about fleets and instances.
 The first form print a list of the fleet names launched and not yet stopped in
 the current context.
-The second form print the value of a property for a list of instances. The
+The second form print the values of the properties for a list of instances. The
 instances may be specified by their name or by the name of their fleet, either
 with a string or a regular expression.
 If no specification is given, print properties for all instances.
+
+Options:
+  --context <path>            path of the context file (default: '%s')
+
+  --defined                   only print defined properties
+
+  --format                    interpret properties as printf like format (see
+                              Format section)
+
+  --sort                      sort instances by their uiid before to print
+                              their properties (shortcut for '--sort-by uiid')
+
+  --sort-by <property>        sort instances by the indicated property before
+                              to print their properties
+
+  --unique-instances          remove duplicate instances before to print their
+                              properties, preserving order (duplicate results
+                              may be displayed if several instances have the
+                              same properties)
+
+  --unique-results            remove duplicate results, preserving order (no
+                              duplicate can be displayed)
+
+  --update                    update context before to print
 
 Properties:
   fleet             name of the fleet of the instances
@@ -42,6 +66,7 @@ Properties:
   region            region code the instance runs in (e.g. 'us-east-2')
   uiid              integer that identifies the instance inside its context
   user              username to use for an ssh connection
+  <attribute>       a custom attribute defined with the 'set' subcommand
 
 Instance specification:
   Instances can be specified either directly by their name or by the name of
@@ -63,26 +88,23 @@ Instance specification:
   The results from different specifications are concatenated without additional
   sorting nor re;oving of duplicate results.
 
-Options:
-  --context <path>            path of the context file (default: '%s')
+Format:
+  If the '--fornat' option is supplied, the properties are interpreted as
+  printf like format with the following formatting sequences.
 
-  --defined                   only print defined properties
+      %%d            fiid
+      %%D            uiid
+      %%f            fleet
+      %%i            public-ip
+      %%I            private-ip
+      %%n            name
+      %%r            region
+      %%u            user
 
-  --sort                      sort instances by their uiid before to print
-                              their properties (shortcut for '--sort-by uiid')
+      %%{<name>}     the value of a property, as defined in the Properties
+                    section (empty string if it is an undefined attribute) 
 
-  --sort-by <property>        sort instances by the indicated property before
-                              to print their properties
-
-  --unique-instances          remove duplicate instances before to print their
-                              properties, preserving order (duplicate results
-                              may be displayed if several instances have the
-                              same properties)
-
-  --unique-results            remove duplicate results, preserving order (no
-                              duplicate can be displayed)
-
-  --update                    update context before to print
+      %%%%            a '%%' character
 
 Examples:
   Print all available fleets, one per line:
@@ -97,8 +119,8 @@ Examples:
   Print all public IP addresses for this context:
 
       %s get public-ip
-      %s get public-ip /^.*$/
-      %s get public-ip //
+      %s get /^.*$/ -- public-ip
+      %s get // -- public-ip
 
   Print the maximum id of an instance inside of its fleet:
 
@@ -106,11 +128,16 @@ Examples:
 
   Print public IP addresses from 'fleet-a' and 'my-fleet' in consisent order:
 
-      %s get --sort ip @my-fleet @fleet-a
+      %s get --sort @my-fleet @fleet-a -- ip
+
+  Print a string containing the public and private IP of all instances
+
+      %s get --format 'public-ip: %%I  /  private-ip: %%{private-ip}'
+
 `,
 		PROGNAME, PROGNAME, DEFAULT_CONTEXT,
 		PROGNAME, PROGNAME, PROGNAME, PROGNAME, PROGNAME, PROGNAME,
-		PROGNAME, PROGNAME)
+		PROGNAME, PROGNAME, PROGNAME)
 }
 
 // Sort the instances inplace depending on the given sortkeys.
