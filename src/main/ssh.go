@@ -587,6 +587,54 @@ func collectExitEagerGreatestz(processes []*Process) int {
 	return max
 }
 
+// Transmit the input and output streams of the given processes, related to
+// the specified instances.
+// The transmission occurs accoring to the '--output-mode' and '--error-mode'
+// options.
+// Return when there is nothing more to transmit from the processes stdout and
+// stderr.
+//
+func transmitStreams(instances *Ec2Selection, processes []*Process) {
+	var done chan bool = make(chan bool)
+	var outTransmit, errTransmit ReaderTransmitter
+
+	if *optionOutmode == "all-prefix" {
+		outTransmit = NewReaderTransmitterAllPrefixStdout(instances,
+			processes)
+	} else if *optionOutmode == "merge-parallel" {
+		outTransmit =
+			NewReaderTransmitterMergeParallelStdout(processes)
+	} else {
+		Error("unknown output mode: '%s'", *optionOutmode)
+	}
+
+	if *optionErrmode == "all-prefix" {
+		errTransmit = NewReaderTransmitterAllPrefixStderr(instances,
+			processes)
+	} else if *optionErrmode == "merge-parallel" {
+		errTransmit =
+			NewReaderTransmitterMergeParallelStderr(processes)
+	} else {
+		Error("unknown errput mode: '%s'", *optionErrmode)
+	}
+
+
+	go func() {
+		outTransmit.Transmit(os.Stdout)
+		done <- true
+	}()
+
+	go func() {
+		errTransmit.Transmit(os.Stderr)
+		done <- true
+	}()
+
+	go taskTransmitStdinz(processes)
+
+	<-done
+	<-done
+}
+
 func taskTransmitStdin(stdins []io.WriteCloser) {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
 	var stdin io.WriteCloser
