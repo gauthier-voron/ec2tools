@@ -292,6 +292,73 @@ func SortPropertyListByString(lists []*PropertyList) []*PropertyList {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// PropertyList uniq related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Return a slice of PropertyList containing the first occurence of
+// PropertyList from the given lists slice having a given value in strs at the
+// same index.
+//
+func uniquePropertyListsByStrings(lists []*PropertyList, strs []string) []*PropertyList {
+	var firstListByValue map[string]*PropertyList
+	var uniq []*PropertyList = make([]*PropertyList, 0)
+	var values []string = make([]string, 0)
+	var list *PropertyList
+	var value string
+	var found bool
+	var i int
+
+	firstListByValue = make(map[string]*PropertyList)
+
+	for i, list = range lists {
+		value = strs[i]
+
+		_, found = firstListByValue[value]
+
+		if !found {
+			firstListByValue[value] = list
+			values = append(values, value)
+		}
+	}
+
+	for _, value = range values {
+			uniq = append(uniq, firstListByValue[value])
+	}
+
+	return uniq
+}
+
+// Return a slice of PropertyList containing the first occurence from the lists
+// slice with the same instance.
+//
+func UniquePropertyListsByInstance(lists []*PropertyList) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = list.Instance.Name
+	}
+
+	return uniquePropertyListsByStrings(lists, strs)
+}
+
+// Return a slice of PropertyList containing the first occurence from the lists
+// slice with the same result string.
+//
+func UniquePropertyListsByString(lists []*PropertyList) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = list.ToString(" ")
+	}
+
+	return uniquePropertyListsByStrings(lists, strs)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 // Sort the instances inplace depending on the given sortkeys.
 // The lengths of instances.Instances and sortkeys must be the same so for one
