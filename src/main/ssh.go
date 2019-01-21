@@ -33,6 +33,7 @@ Options:
   --context <path>            path of the context file (default: '%s')
   --error-mode <stream-mode>  stream-mode of the stderr (default: '%s')
   --exit-mode <exit-mode>     exit-mode used (default: '%s')
+  --format                    interpret the cmd and args as printf format
   --output-mode <stream-mode> stream-mode of the stdout (default: '%s')
   --timeout <sec>             cancel commands after <sec> seconds (default: %d)
   --user <user-name>          user to ssh connect to instances (default: contextual)
