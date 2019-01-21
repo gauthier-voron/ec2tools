@@ -33,6 +33,7 @@ Options:
   --context <path>            path of the context file (default: '%s')
   --error-mode <stream-mode>  stream-mode of the stderr (default: '%s')
   --exit-mode <exit-mode>     exit-mode used (default: '%s')
+  --format                    interpret the cmd and args as printf format
   --output-mode <stream-mode> stream-mode of the stdout (default: '%s')
   --timeout <sec>             cancel commands after <sec> seconds (default: %d)
   --user <user-name>          user to ssh connect to instances (default: contextual)
@@ -487,10 +488,21 @@ func doSsh(instances *Ec2Selection, cmdline []string) {
 	var processes []*Process = make([]*Process, len(instances.Instances))
 	var builder *SshProcessBuilder
 	var instance *Ec2Instance
-	var i int
+	var cmdargs []string
+	var cmdarg string
+	var i, j int
 
 	for i, instance = range instances.Instances {
-		builder = BuildSshProcess(instance, cmdline)
+		if *optionFormat {
+			cmdargs = make([]string, len(cmdline))
+			for j, cmdarg = range cmdline {
+				cmdargs[j] = Format(cmdarg, instance)
+			}
+		} else {
+			cmdargs = cmdline
+		}
+
+		builder = BuildSshProcess(instance, cmdargs)
 
 		if *optionTimeout >= 0 {
 			builder.Timeout(int(*optionTimeout))
@@ -547,6 +559,7 @@ func Ssh(args []string) {
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionErrmode = flags.String("error-mode", DEFAULT_ERRMODE, "")
 	optionExtmode = flags.String("exit-mode", DEFAULT_EXTMODE, "")
+	optionFormat = flags.Bool("format", DEFAULT_FORMAT, "")
 	optionOutmode = flags.String("output-mode", DEFAULT_OUTMODE, "")
 	optionTimeout = flags.Int64("timeout", DEFAULT_TIMEOUT, "")
 	optionUser = flags.String("user", "", "")
