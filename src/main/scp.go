@@ -30,7 +30,7 @@ specified by the local pattern.
 If there is more than one remote path, they must all start with a ':'
 character.
 The local pattern is a printf like pattern that get substitued for each
-specified instance (see '%s help format' for more information about patterns).
+specified instance (see '%s help get' for more information about patterns).
 The pattern must produce different strings for each instance.
 
 If no instance is specified, apply to all instances.
