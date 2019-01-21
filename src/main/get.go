@@ -4,10 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"sort"
-	"strconv"
 )
 
 var DEFAULT_DEFINED bool = false
+var DEFAULT_FORMAT bool = false
 var DEFAULT_SORT bool = false
 var DEFAULT_SORT_BY string = ""
 var DEFAULT_UNIQUE_INSTANCES bool = false
@@ -15,6 +15,7 @@ var DEFAULT_UNIQUE_RESULTS bool = false
 var DEFAULT_UPDATE bool = false
 
 var optionDefined *bool
+var optionFormat *bool
 var optionSort *bool
 var optionSortBy *string
 var optionUniqueInstances *bool
@@ -23,15 +24,39 @@ var optionUpdate *bool
 
 func PrintGetUsage() {
 	fmt.Printf(`Usage: %s get [options] fleets
-       %s get [options] [<instances-specification...> --] <property>
+       %s get [options] [<instances-specification...> --] <properties...>
 
 Print information about fleets and instances.
 The first form print a list of the fleet names launched and not yet stopped in
 the current context.
-The second form print the value of a property for a list of instances. The
+The second form print the values of the properties for a list of instances. The
 instances may be specified by their name or by the name of their fleet, either
 with a string or a regular expression.
 If no specification is given, print properties for all instances.
+
+Options:
+  --context <path>            path of the context file (default: '%s')
+
+  --defined                   only print defined properties
+
+  --format                    interpret properties as printf like format (see
+                              Format section)
+
+  --sort                      sort instances by their uiid before to print
+                              their properties (shortcut for '--sort-by uiid')
+
+  --sort-by <property>        sort instances by the indicated property before
+                              to print their properties
+
+  --unique-instances          remove duplicate instances before to print their
+                              properties, preserving order (duplicate results
+                              may be displayed if several instances have the
+                              same properties)
+
+  --unique-results            remove duplicate results, preserving order (no
+                              duplicate can be displayed)
+
+  --update                    update context before to print
 
 Properties:
   fleet             name of the fleet of the instances
@@ -42,6 +67,7 @@ Properties:
   region            region code the instance runs in (e.g. 'us-east-2')
   uiid              integer that identifies the instance inside its context
   user              username to use for an ssh connection
+  <attribute>       a custom attribute defined with the 'set' subcommand
 
 Instance specification:
   Instances can be specified either directly by their name or by the name of
@@ -63,26 +89,23 @@ Instance specification:
   The results from different specifications are concatenated without additional
   sorting nor re;oving of duplicate results.
 
-Options:
-  --context <path>            path of the context file (default: '%s')
+Format:
+  If the '--fornat' option is supplied, the properties are interpreted as
+  printf like format with the following formatting sequences.
 
-  --defined                   only print defined properties
+      %%d            fiid
+      %%D            uiid
+      %%f            fleet
+      %%i            public-ip
+      %%I            private-ip
+      %%n            name
+      %%r            region
+      %%u            user
 
-  --sort                      sort instances by their uiid before to print
-                              their properties (shortcut for '--sort-by uiid')
+      %%{<name>}     the value of a property, as defined in the Properties
+                    section (empty string if it is an undefined attribute) 
 
-  --sort-by <property>        sort instances by the indicated property before
-                              to print their properties
-
-  --unique-instances          remove duplicate instances before to print their
-                              properties, preserving order (duplicate results
-                              may be displayed if several instances have the
-                              same properties)
-
-  --unique-results            remove duplicate results, preserving order (no
-                              duplicate can be displayed)
-
-  --update                    update context before to print
+      %%%%            a '%%' character
 
 Examples:
   Print all available fleets, one per line:
@@ -97,8 +120,8 @@ Examples:
   Print all public IP addresses for this context:
 
       %s get public-ip
-      %s get public-ip /^.*$/
-      %s get public-ip //
+      %s get /^.*$/ -- public-ip
+      %s get // -- public-ip
 
   Print the maximum id of an instance inside of its fleet:
 
@@ -106,315 +129,299 @@ Examples:
 
   Print public IP addresses from 'fleet-a' and 'my-fleet' in consisent order:
 
-      %s get --sort ip @my-fleet @fleet-a
+      %s get --sort @my-fleet @fleet-a -- ip
+
+  Print a string containing the public and private IP of all instances
+
+      %s get --format 'public-ip: %%I  /  private-ip: %%{private-ip}'
+
 `,
 		PROGNAME, PROGNAME, DEFAULT_CONTEXT,
 		PROGNAME, PROGNAME, PROGNAME, PROGNAME, PROGNAME, PROGNAME,
-		PROGNAME, PROGNAME)
+		PROGNAME, PROGNAME, PROGNAME)
 }
 
-// Sort the instances inplace depending on the given sortkeys.
-// The lengths of instances.Instances and sortkeys must be the same so for one
-// instance, there is one sortkey.
-// There can be duplicated values in sortkeys.
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// PropertList related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// A list of properties of format associated with an instance.
 //
-func sortInstances(instances *Ec2Selection, sortkeys []string) {
-	var smap map[string][]*Ec2Instance
-	var instance *Ec2Instance
-	var key, prev string
+type PropertyList struct {
+	Instance   *Ec2Instance // instance with the associated properties
+	Properties []*Property  // properties fetched for the instance
+	Values     []string     // values of properties to show
+}
+
+// Create a new empty PropertyList associated to the given instance.
+//
+func NewPropertyList(instance *Ec2Instance) *PropertyList {
+	var this PropertyList
+
+	this.Instance = instance
+	this.Properties = make([]*Property, 0)
+	this.Values = make([]string, 0)
+
+	return &this
+}
+
+// Add a new property with the given name to the list.
+//
+func (this *PropertyList) GetProperty(name string) {
+	var property *Property = GetProperty(this.Instance, name)
+
+	this.Properties = append(this.Properties, property)
+	this.Values = append(this.Values, property.Value)
+}
+
+// Add a new formatted string to the list.
+//
+func (this *PropertyList) AddFormat(pattern string) {
+	var property *Property = GetProperty(this.Instance, "uiid")
+	var value string = Format(pattern, this.Instance)
+
+	this.Properties = append(this.Properties, property)
+	this.Values = append(this.Values, value)
+}
+
+// Indicate if every properties of the list are defined.
+//
+func (this *PropertyList) IsFullyDefined() bool {
+	var property *Property
+
+	for _, property = range this.Properties {
+		if !property.Defined {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Concatenate all the properties and formatted string in a single string,
+// separated by the given string.
+//
+func (this *PropertyList) ToString(separator string) string {
+	var first bool = true
+	var value, ret string
+
+	ret = ""
+
+	for _, value = range this.Values {
+		if first {
+			first = false
+		} else {
+			ret += separator
+		}
+
+		ret += value
+	}
+
+	return ret
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// PropertyList sort related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Sort the given PropertyList according to a related key, located in the
+// given strs slice at the ame index.
+// Return a new slice of sorted PropertyList.
+//
+func sortPropertyListByStrings(lists []*PropertyList, strs []string) []*PropertyList {
+	var listsByValue map[string][]*PropertyList
+	var sorted []*PropertyList = make([]*PropertyList, 0)
+	var values []string = make([]string, 0)
+	var list *PropertyList
+	var value string
+	var found bool
 	var i int
 
-	if len(sortkeys) == 0 {
-		return
-	}
+	listsByValue = make(map[string][]*PropertyList)
 
-	smap = make(map[string][]*Ec2Instance)
+	for i, list = range lists {
+		value = strs[i]
 
-	for i, key = range sortkeys {
-		smap[key] = append(smap[key], instances.Instances[i])
-	}
+		_, found = listsByValue[value]
 
-	sort.Strings(sortkeys)
-
-	instances.Instances = make([]*Ec2Instance, 0, len(sortkeys))
-
-	prev = sortkeys[0] + " "
-	for i, key = range sortkeys {
-		if key == prev {
-			continue
-		}
-
-		for _, instance = range smap[key] {
-			instances.Instances = append(instances.Instances,
-				instance)
-		}
-
-		prev = key
-	}
-}
-
-// Remove duplicates from the given instances, preserving the order of the
-// first occurence of each instance.
-//
-func uniqueInstances(instances *Ec2Selection) {
-	var umap map[int]*Ec2Instance = make(map[int]*Ec2Instance)
-	var unique []*Ec2Instance = make([]*Ec2Instance, 0)
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		if umap[instance.UniqueIndex] == nil {
-			umap[instance.UniqueIndex] = instance
-			unique = append(unique, instance)
-		}
-	}
-
-	instances.Instances = unique
-}
-
-// Create a slice of string that contains every first occurence of each string
-// found in the given results slice, in the same order.
-//
-func uniqueResults(results []string) []string {
-	var umap map[string]bool = make(map[string]bool)
-	var unique []string = make([]string, 0, len(results))
-	var result string
-	var found bool
-
-	for _, result = range results {
-		_, found = umap[result]
 		if !found {
-			umap[result] = true
-			unique = append(unique, result)
+			values = append(values, value)
+		}
+
+		listsByValue[value] = append(listsByValue[value], list)
+	}
+
+	sort.Strings(values)
+
+	for _, value = range values {
+		for _, list = range listsByValue[value] {
+			sorted = append(sorted, list)
 		}
 	}
 
-	return unique
+	return sorted
 }
 
-// Return a slice containing all the fleet names for a given Ec2Index.
+// Sort the given PropertyList depending on the value of their associated
+// Property which the name is specified.
 //
-func GetAllFleets(idx *Ec2Index) []string {
-	var results []string = make([]string, 0, len(idx.FleetsByName))
+func SortPropertyListByProperty(lists []*PropertyList, name string) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = GetProperty(list.Instance, name).Value
+	}
+
+	return sortPropertyListByStrings(lists, strs)
+}
+
+// Sort the given PropertyList depending on the value of their concatenated
+// property values or formatted strings.
+//
+func SortPropertyListByString(lists []*PropertyList) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = list.ToString(" ")
+	}
+
+	return sortPropertyListByStrings(lists, strs)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// PropertyList uniq related code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+// Return a slice of PropertyList containing the first occurence of
+// PropertyList from the given lists slice having a given value in strs at the
+// same index.
+//
+func uniquePropertyListsByStrings(lists []*PropertyList, strs []string) []*PropertyList {
+	var firstListByValue map[string]*PropertyList
+	var uniq []*PropertyList = make([]*PropertyList, 0)
+	var values []string = make([]string, 0)
+	var list *PropertyList
+	var value string
+	var found bool
+	var i int
+
+	firstListByValue = make(map[string]*PropertyList)
+
+	for i, list = range lists {
+		value = strs[i]
+
+		_, found = firstListByValue[value]
+
+		if !found {
+			firstListByValue[value] = list
+			values = append(values, value)
+		}
+	}
+
+	for _, value = range values {
+			uniq = append(uniq, firstListByValue[value])
+	}
+
+	return uniq
+}
+
+// Return a slice of PropertyList containing the first occurence from the lists
+// slice with the same instance.
+//
+func UniquePropertyListsByInstance(lists []*PropertyList) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = list.Instance.Name
+	}
+
+	return uniquePropertyListsByStrings(lists, strs)
+}
+
+// Return a slice of PropertyList containing the first occurence from the lists
+// slice with the same result string.
+//
+func UniquePropertyListsByString(lists []*PropertyList) []*PropertyList {
+	var strs []string = make([]string, len(lists))
+	var list *PropertyList
+	var i int
+
+	for i, list = range lists {
+		strs[i] = list.ToString(" ")
+	}
+
+	return uniquePropertyListsByStrings(lists, strs)
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Main routines code
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func doGetFleets(idx *Ec2Index) {
 	var name string
 
 	for name = range idx.FleetsByName {
-		results = append(results, name)
+		fmt.Println(name)
 	}
-
-	return results
 }
 
-// Return a slice containing the name of each instance of the given
-// Ec2Selection.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetNames(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
+func doGetProperties(selection *Ec2Selection, propstrs []string) {
+	var lists []*PropertyList = make([]*PropertyList, 0)
 	var instance *Ec2Instance
+	var list *PropertyList
+	var str string
 
-	for _, instance = range instances.Instances {
-		results = append(results, instance.Name)
+	for _, instance = range selection.Instances {
+		lists = append(lists, NewPropertyList(instance))
 	}
 
-	return results
-}
-
-// Return a slice containing the public IPv4 address of each instance of the
-// given Ec2Selection.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetPublicIps(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, instance.PublicIp)
+	if *optionUniqueInstances {
+		lists = UniquePropertyListsByInstance(lists)
 	}
 
-	return results
-}
-
-// Return a slice containing the private IPv4 address of each instance of the
-// given Ec2Selection.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetPrivateIps(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, instance.PrivateIp)
-	}
-
-	return results
-}
-
-// Return a slice containing the region code of each instance of the given
-// Ec2Selection.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetRegions(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, instance.Fleet.Region)
-	}
-
-	return results
-}
-
-// Return a slice containing the connection username of each instance of the
-// given Ec2Selection.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetUsers(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, instance.Fleet.User)
-	}
-
-	return results
-}
-
-// Return a slice containing the fleet index of each instance of the given
-// Ec2Selection (as a string).
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetFiids(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, strconv.Itoa(instance.FleetIndex))
-	}
-
-	return results
-}
-
-// Return a slice containing the fleet name of each instance of the given
-// Ec2Selection.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetFleets(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, instance.Fleet.Name)
-	}
-
-	return results
-}
-
-// Return a slice containing the unique index of each instance of the given
-// Ec2Selection (as a string).
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func GetUiids(instances *Ec2Selection) []string {
-	var results []string = make([]string, 0, len(instances.Instances))
-	var instance *Ec2Instance
-
-	for _, instance = range instances.Instances {
-		results = append(results, strconv.Itoa(instance.UniqueIndex))
-	}
-
-	return results
-}
-
-func GetAttributes(instances *Ec2Selection, name string) ([]string, []bool) {
-	var sresults []string = make([]string, 0, len(instances.Instances))
-	var bresults []bool = make([]bool, 0, len(instances.Instances))
-	var instance *Ec2Instance
-	var value string
-	var found bool
-
-	for _, instance = range instances.Instances {
-		value, found = instance.Attributes[name]
-
-		if found {
-			sresults = append(sresults, value)
-		} else {
-			sresults = append(sresults, "")
+	for _, str = range propstrs {
+		for _, list = range lists {
+			if *optionFormat {
+				list.AddFormat(str)
+			} else {
+				list.GetProperty(str)
+			}
 		}
-
-		bresults = append(bresults, found)
 	}
 
-	return sresults, bresults
-}
-
-// Return a slice containing the property value of each instance of the given
-// Ec2Selection, given this property name as a string.
-// The string values appear in the same order than the instances do.
-// If their are duplicate instances in the given Ec2Selection, there are
-// duplicate string values in the returned slice as well.
-//
-func getInstancesProperty(instances *Ec2Selection, property string) ([]string, []bool) {
-	var sresults []string
-	var bresults []bool
-	var idx int
-
-	if property == "name" {
-		sresults = GetNames(instances)
-	} else if (property == "ip") || (property == "public-ip") {
-		sresults = GetPublicIps(instances)
-	} else if property == "private-ip" {
-		sresults = GetPrivateIps(instances)
-	} else if property == "region" {
-		sresults = GetRegions(instances)
-	} else if property == "user" {
-		sresults = GetUsers(instances)
-	} else if property == "fiid" {
-		sresults = GetFiids(instances)
-	} else if property == "fleet" {
-		sresults = GetFleets(instances)
-	} else if property == "uiid" {
-		sresults = GetUiids(instances)
-	} else {
-		return GetAttributes(instances, property)
+	if *optionUniqueResults {
+		lists = UniquePropertyListsByString(lists)
 	}
 
-	bresults = make([]bool, len(sresults))
-
-	for idx, _ = range sresults {
-		bresults[idx] = true
+	if *optionSortBy != "" {
+		lists = SortPropertyListByProperty(lists, *optionSortBy)
 	}
 
-	return sresults, bresults
+	for _, list = range lists {
+		if !*optionDefined || list.IsFullyDefined() {
+			fmt.Println(list.ToString(" "))
+		}
+	}
 }
 
 func Get(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var results, sortkeys, specs, properties, defresults []string
+	var specs, propstrs []string
 	var instances *Ec2Selection
-	var hasSpecs, defined bool
-	var arg, result string
-	var defineds []bool
-	var idx *Ec2Index
+	var ctx *Ec2Index
+	var hasSpecs bool
+	var arg string
 	var err error
-	var i int
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionDefined = flags.Bool("defined", DEFAULT_DEFINED, "")
+	optionFormat = flags.Bool("format", DEFAULT_FORMAT, "")
 	optionSort = flags.Bool("sort", DEFAULT_SORT, "")
 	optionSortBy = flags.String("sort-by", DEFAULT_SORT_BY, "")
 	optionUniqueInstances = flags.Bool("unique-instances", DEFAULT_UNIQUE_INSTANCES, "")
@@ -429,87 +436,54 @@ func Get(args []string) {
 	}
 
 	hasSpecs = false
-	specs = []string{"//"}
-	properties = make([]string, 0)
-
 	for _, arg = range args {
 		if (arg == "--") && !hasSpecs {
 			hasSpecs = true
-			specs = properties
-			properties = make([]string, 0)
+			specs = propstrs
+			propstrs = make([]string, 0)
 			continue
 		}
 
-		properties = append(properties, arg)
+		propstrs = append(propstrs, arg)
 	}
 
-	if len(properties) < 1 {
+	if len(propstrs) < 1 {
 		Error("missing property operand")
-	} else if len(properties) > 1 {
-		Error("too many property operands")
-	} else if len(specs) < 1 {
-		Error("missing instance-spec operand")
 	}
 
-	if *optionSort {
-		if *optionSortBy != DEFAULT_SORT_BY {
-			Error("options 'sort' and 'sort-by' are exclusives")
-		} else {
-			*optionSortBy = "uiid"
-		}
-	}
-
-	idx, err = LoadEc2Index(*optionContext)
+	ctx, err = LoadEc2Index(*optionContext)
 	if err != nil {
 		Error("no context: %s", *optionContext)
 	}
 
-	if *optionUpdate {
-		UpdateContext(idx)
-		StoreEc2Index(*optionContext, idx)
+	if *optionSort {
+		*optionSortBy = "uiid"
 	}
 
-	if args[0] == "fleets" {
-		if hasSpecs {
-			Error("unexpected instance-spec operand")
+	if propstrs[0] == "fleets" {
+		if len(propstrs) > 1 {
+			Error("unexpected operand: '%s'", propstrs[1])
+		} else if hasSpecs {
+			Error("unexpected instance specification: '%s'",
+				specs[0])
 		}
-		results = GetAllFleets(idx)
+
+		doGetFleets(ctx)
 	} else {
-		instances, err = idx.Select(specs)
-		if err != nil {
-			Error("invalid specification: %s", err.Error())
+		if *optionUpdate {
+			UpdateContext(ctx)
+			StoreEc2Index(*optionContext, ctx)
 		}
 
-		if *optionUniqueInstances {
-			uniqueInstances(instances)
-		}
-
-		if *optionSortBy != "" {
-			sortkeys, _ = getInstancesProperty(instances,
-				*optionSortBy)
-
-			sortInstances(instances, sortkeys)
-		}
-
-		results, defineds = getInstancesProperty(instances, properties[0])
-
-		if *optionDefined {
-			defresults = make([]string, 0)
-			for i, defined = range defineds {
-				if defined {
-					defresults =
-						append(defresults, results[i])
-				}
+		if !hasSpecs {
+			instances, _ = ctx.Select([]string{"//"})
+		} else {
+			instances, err = ctx.Select(specs)
+			if err != nil {
+				Error("invalid specification: %s", err.Error())
 			}
-			results = defresults
 		}
-	}
 
-	if *optionUniqueResults {
-		results = uniqueResults(results)
-	}
-
-	for _, result = range results {
-		fmt.Println(result)
+		doGetProperties(instances, propstrs)
 	}
 }
