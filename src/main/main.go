@@ -37,8 +37,10 @@ Commands:
   launch       launch a new fleet of instances
   stop         stop one, several or all instances
   scp          copy files from and to instances
+  set          add information on fleets or instances
   ssh          launch arbitrary commands on instances
   update       update the state of the launched instances
+  wait         wait for some instances to be ready
 `, PROGNAME)
 }
 
