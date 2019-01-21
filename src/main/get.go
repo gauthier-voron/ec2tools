@@ -323,7 +323,7 @@ func uniquePropertyListsByStrings(lists []*PropertyList, strs []string) []*Prope
 	}
 
 	for _, value = range values {
-			uniq = append(uniq, firstListByValue[value])
+		uniq = append(uniq, firstListByValue[value])
 	}
 
 	return uniq
