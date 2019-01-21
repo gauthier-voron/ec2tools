@@ -21,7 +21,7 @@ type `./ec2tools help launch` to get help on the `launch` subcommand. You can
 also invoke the help command with no argument to get a summary of the available
 subcommands and of what they do.
 
-Launch a new fleet and how to use it:
+#### Launch a new fleet and use it:
 ```
 # Launch a new fleet of 3 c5.large instances in Ohio
 ec2tools launch --key=my-aws-key --region=us-east-2 --image='ami-965e6bf3' \
@@ -38,17 +38,17 @@ ec2tools ssh uname -a
 ec2tools stop
 ```
 
-Launch two fleets and control them separately:
+#### Launch two fleets and control them separately:
 ```
 # Launch a new fleet of 2 c5.large instances in Ohio
 ec2tools launch --key=my-aws-key --region=us-east-2 --image='ami-965e6bf3' \
                 --user='ubuntu' --type='c5.large' --price=0.03 --size=2    \
-		--secgroup='sg-98338af0' 'my-fleet-ohio'
+	        --secgroup='sg-98338af0' 'my-fleet-ohio'
 
 # Launch a new fleet of 4 c4.large instances in Sydney
 ec2tools launch --key=my-aws-key --region=ap-southeast-2 --user='ec2-user' \
-                --image='ami-942dd1f6' --type='c5.large' --price=0.033     \
-		--size=2 --secgroup='sg-0e9b9bbee1dfc700a' 'my-fleet-sydney'
+                --image='ami-942dd1f6' --type='c4.large' --price=0.033     \
+	        --size=4 --secgroup='sg-0e9b9bbee1dfc700a' 'my-fleet-sydney'
 
 # Wait for every instances to be ready to receive ssh commands
 ec2tools wait
@@ -69,7 +69,7 @@ ec2tools stop 'my-fleet-sydney'
 ec2tools stop 'my-fleet-ohio'
 ```
 
-Send and receive files:
+#### Send and receive files:
 ```
 # Launch instances and wait for them
 ec2tools launch ...
@@ -94,7 +94,7 @@ ec2tools scp ':remote-file-0' ':remote-file-1' 'local-directory-%f-%d'
 ec2tools stop
 ```
 
-Tag instances with custom properties:
+#### Tag instances with custom properties:
 ```
 # Launch instances and wait for them
 ec2tools launch ...
