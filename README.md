@@ -21,5 +21,97 @@ type `./ec2tools help launch` to get help on the `launch` subcommand. You can
 also invoke the help command with no argument to get a summary of the available
 subcommands and of what they do.
 
-The file `example.sh` is an example of how to use the `ec2tools` command to
-achieve multi-region tasks in small shell scripts.
+#### Launch a new fleet and use it:
+```
+# Launch a new fleet of 3 c5.large instances in Ohio
+ec2tools launch --key=my-aws-key --region=us-east-2 --image='ami-965e6bf3' \
+                --user='ubuntu' --type='c5.large' --price=0.03 --size=3    \
+                --secgroup='sg-98338af0' 'my-fleet-ohio'
+
+# Wait for every instances to be ready to receive ssh commands
+ec2tools wait
+
+# Say hello
+ec2tools ssh uname -a
+
+# Stop every instances
+ec2tools stop
+```
+
+#### Launch two fleets and control them separately:
+```
+# Launch a new fleet of 2 c5.large instances in Ohio
+ec2tools launch --key=my-aws-key --region=us-east-2 --image='ami-965e6bf3' \
+                --user='ubuntu' --type='c5.large' --price=0.03 --size=2    \
+                --secgroup='sg-98338af0' 'my-fleet-ohio'
+
+# Launch a new fleet of 4 c4.large instances in Sydney
+ec2tools launch --key=my-aws-key --region=ap-southeast-2 --user='ec2-user' \
+                --image='ami-942dd1f6' --type='c4.large' --price=0.033     \
+                --size=4 --secgroup='sg-0e9b9bbee1dfc700a' 'my-fleet-sydney'
+
+# Wait for every instances to be ready to receive ssh commands
+ec2tools wait
+
+# Say hello on Sydney
+ec2tools ssh '@my-fleet-sydney' -- uname -a
+
+# Say hello on Ohio
+ec2tools ssh '@my-fleet-ohio' -- uname -a
+
+# Make every instance print its name and its region
+ec2tools ssh --format echo 'name: %n  //  region: %r'
+
+# Stop every instances of the sydney fleet
+ec2tools stop 'my-fleet-sydney'
+
+# Stop every instances of the ohio fleet
+ec2tools stop 'my-fleet-ohio'
+```
+
+#### Send and receive files:
+```
+# Launch instances and wait for them
+ec2tools launch ...
+ec2tools wait
+
+# Send several local files in a specific directory
+ec2tools scp 'local-file-0' 'local-file-1' ':remote-directory'
+
+# Receive a remote file with a name depending on the sending instance
+ec2tools scp ':remote-file.txt' 'local-pattern-%n.txt'
+
+# Create one directory per instance, tagged with the fleet name and the
+# instance ID
+ec2tools get fleet fiid | while read fleet fiid ; do
+    mkdir "local-directory-$fleet-$fiid"
+done
+
+# Receive several remote files in an instance specific directory
+ec2tools scp ':remote-file-0' ':remote-file-1' 'local-directory-%f-%d'
+
+# Stop all instances
+ec2tools stop
+```
+
+#### Tag instances with custom properties:
+```
+# Launch instances and wait for them
+ec2tools launch ...
+ec2tools wait
+
+# Tag every instances in the fleet 'my-fleet-sydney'
+ec2tools set '@my-fleet-sydney' -- 'my-tag' 18
+
+# Tag every instances having a name starting with 'i-03'
+ec2tools set '/^i-03/' -- 'my-tag' 37
+
+# List every instance public IP tagged with property 'my-tag'
+ec2tools get --defined 'my-tag' ip
+
+# Use tags in ssh command
+ec2tools ssh --format '@my-fleet-sydney' -- echo 'my tag is %{my-tag}'
+
+# Stop all instances
+ec2tools stop
+```

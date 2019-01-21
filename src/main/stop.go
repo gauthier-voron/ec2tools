@@ -28,7 +28,7 @@ func requestStop(region string, ids []*string) bool {
 	var err error
 
 	sess = session.New()
-	client = ec2.New(sess, &aws.Config { Region: &region })
+	client = ec2.New(sess, &aws.Config{Region: &region})
 
 	params.SpotFleetRequestIds = ids
 	params.TerminateInstances = aws.Bool(true)
@@ -42,12 +42,13 @@ func requestStop(region string, ids []*string) bool {
 
 func taskRequestStop(region string, ids []*string, retchan chan bool) {
 	var payload bool = requestStop(region, ids)
-	retchan <-payload
+	retchan <- payload
 }
 
-func doRegionStops(ctx *Context, regionFleets map[string][]*string) {
+func doRegionStops(ctx *Ec2Index, regionFleets map[string][]*string) {
 	var regionChans map[string]chan bool
-	var fleetName, region string
+	var fleet *Ec2Fleet
+	var region string
 	var id *string
 	var ret bool
 
@@ -60,16 +61,16 @@ func doRegionStops(ctx *Context, regionFleets map[string][]*string) {
 	}
 
 	for region = range regionFleets {
-		ret = <- regionChans[region]
+		ret = <-regionChans[region]
 
 		if ret {
 			for _, id = range regionFleets[region] {
-				for fleetName = range ctx.Fleets {
-					if ctx.Fleets[fleetName].Id != *id {
+				for _, fleet = range ctx.FleetsByName {
+					if fleet.Id != *id {
 						continue
 					}
 
-					delete(ctx.Fleets, fleetName)
+					ctx.RemoveEc2Fleet(fleet)
 					break
 				}
 			}
@@ -81,27 +82,26 @@ func doRegionStops(ctx *Context, regionFleets map[string][]*string) {
 	}
 }
 
-func DoStop(ctx *Context, fleetNames []string) {
+func DoStop(ctx *Ec2Index, fleetNames []string) {
 	var regionFleets map[string][]*string
-	var fleet *ContextFleet
+	var fleet *Ec2Fleet
 	var fleetName string
 
 	regionFleets = make(map[string][]*string)
 
 	if len(fleetNames) == 0 {
-		for fleetName = range ctx.Fleets {
-			fleet = ctx.Fleets[fleetName]
+		for fleetName, fleet = range ctx.FleetsByName {
 			regionFleets[fleet.Region] =
 				append(regionFleets[fleet.Region], &fleet.Id)
 		}
 	} else {
 		for _, fleetName = range fleetNames {
-			if ctx.Fleets[fleetName] == nil {
+			if ctx.FleetsByName[fleetName] == nil {
 				Error("unknown fleet-name: '%s'", fleetName)
 			}
 		}
 		for _, fleetName = range fleetNames {
-			fleet = ctx.Fleets[fleetName]
+			fleet = ctx.FleetsByName[fleetName]
 			regionFleets[fleet.Region] =
 				append(regionFleets[fleet.Region], &fleet.Id)
 		}
@@ -112,15 +112,19 @@ func DoStop(ctx *Context, fleetNames []string) {
 
 func Stop(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
-	var ctx *Context
+	var ctx *Ec2Index
+	var err error
 
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 
 	flags.Parse(args[1:])
 
-	ctx = LoadContext(*optionContext)
+	ctx, err = LoadEc2Index(*optionContext)
+	if err != nil {
+		Error("no context: %s", *optionContext)
+	}
 
 	DoStop(ctx, flags.Args())
 
-	StoreContext(*optionContext, ctx)
+	StoreEc2Index(*optionContext, ctx)
 }
