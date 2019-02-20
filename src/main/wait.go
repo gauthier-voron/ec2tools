@@ -59,6 +59,9 @@ Options:
                               format like '30' (seconds), '1m20' or even
                               '1h 40m 30s'
 
+  --verbose                   print what is happening as well as the debug
+                              output for ssh connections
+
   --wait-for <wait-type>      when to consider an instance is ready: 'ip' when
                               it has a public IPv4 address. 'ssh' when it is
                               reachable via ssh (default: '%s').
