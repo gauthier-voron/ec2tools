@@ -227,16 +227,30 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 //
 func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 	var proc *Process
-	var found, exited bool
+	var found, has, exited bool
+	var line string
 	var exitcode int
 
 	proc, found = this.Processes[instance]
-
-	if found {
-		exitcode, exited = proc.ExitCode()
+	if !found {
+		return false
 	}
 
-	if found && exited && (exitcode == 0) {
+	for {
+		line, has = proc.TryReadStderr()
+		if !has {
+			break
+		}
+
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr, "[ssh:%s] %s", instance.Name,
+				line)
+		}
+	}
+
+	exitcode, exited = proc.ExitCode()
+
+	if exited && (exitcode == 0) {
 		if *waitParams.OptionVerbose {
 			fmt.Fprintf(os.Stderr, "[ec2tools] valid %s\n",
 				instance.Name)
