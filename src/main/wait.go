@@ -147,6 +147,9 @@ func (this *ValidityMapIp) IsValid(instance *Ec2Instance) bool {
 	var found bool
 
 	_, found = this.PublicIps[instance]
+	if found && *waitParams.OptionVerbose {
+		fmt.Fprintf(os.Stderr, "[ec2tools] valid %s\n", instance.Name)
+	}
 
 	return found
 }
@@ -208,6 +211,13 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 			}
 		}
 
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr,
+				"[ec2tools] ssh connect to %s\n",
+				instance.Name)
+			builder.Verbose()
+		}
+
 		this.Processes[instance] = builder.Build()
 		this.Processes[instance].Start()
 	}
@@ -226,7 +236,15 @@ func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 		exitcode, exited = proc.ExitCode()
 	}
 
-	return (found && exited && (exitcode == 0))
+	if found && exited && (exitcode == 0) {
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr, "[ec2tools] valid %s\n",
+				instance.Name)
+		}
+		return true
+	} else {
+		return false
+	}
 }
 
 // Wait for all the background ssh processes to end.
@@ -330,6 +348,9 @@ func waitFleets(ctx *Ec2Index, specs []string) bool {
 
 		time.Sleep(1000 * time.Millisecond)
 
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr, "[ec2tools] update context\n")
+		}
 		UpdateContext(ctx)
 	}
 
