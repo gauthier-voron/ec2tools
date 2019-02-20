@@ -16,12 +16,14 @@ type waitParameters struct {
 	OptionContext *string
 	OptionCount   *string
 	OptionTimeout *string
+	OptionVerbose *bool
 	OptionWaitFor *string
 }
 
 var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
 var DEFAULT_WAIT_COUNT string = "100%"
 var DEFAULT_WAIT_TIMEOUT string = ""
+var DEFAULT_WAIT_VERBOSE bool = false
 var DEFAULT_WAIT_WAIT_FOR string = "ssh"
 
 var waitParams waitParameters
@@ -404,6 +406,7 @@ func Wait(args []string) {
 	waitParams.OptionContext = flags.String("context", DEFAULT_WAIT_CONTEXT, "")
 	waitParams.OptionCount = flags.String("count", DEFAULT_WAIT_COUNT, "")
 	waitParams.OptionTimeout = flags.String("timeout", DEFAULT_WAIT_TIMEOUT, "")
+	waitParams.OptionVerbose = flags.Bool("verbose", DEFAULT_WAIT_VERBOSE, "")
 	waitParams.OptionWaitFor = flags.String("wait-for", DEFAULT_WAIT_WAIT_FOR, "")
 
 	flags.Parse(args[1:])
