@@ -133,7 +133,7 @@ func (this *SshProcessBuilder) Build() *Process {
 	}
 
 	if this.verbose {
-		sshcmd = append(sshcmd, "-vvv")
+		sshcmd = append(sshcmd, "-v")
 	}
 
 	if this.user != nil {
