@@ -249,6 +249,18 @@ func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 	}
 
 	for {
+		line, has = proc.TryReadStdout()
+		if !has {
+			break
+		}
+
+		if *waitParams.OptionCommand != "" {
+			fmt.Fprintf(os.Stdout, "[%s] %s", instance.Name,
+				line)
+		}
+	}
+
+	for {
 		line, has = proc.TryReadStderr()
 		if !has {
 			break
@@ -256,6 +268,9 @@ func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 
 		if *waitParams.OptionVerbose {
 			fmt.Fprintf(os.Stderr, "[ssh:%s] %s", instance.Name,
+				line)
+		} else if *waitParams.OptionCommand != "" {
+			fmt.Fprintf(os.Stderr, "[%s] %s", instance.Name,
 				line)
 		}
 	}
