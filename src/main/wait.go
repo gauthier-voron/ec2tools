@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,7 @@ const (
 )
 
 type waitParameters struct {
+	OptionCommand *string
 	OptionContext *string
 	OptionCount   *string
 	OptionTimeout *string
@@ -20,6 +22,7 @@ type waitParameters struct {
 	OptionWaitFor *string
 }
 
+var DEFAULT_WAIT_COMMAND string = ""
 var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
 var DEFAULT_WAIT_COUNT string = "100%"
 var DEFAULT_WAIT_TIMEOUT string = ""
@@ -48,6 +51,9 @@ expressions. In this last case, it starts and ends with a '/' character.
 If no fleet specification is supplied, wait for all fleets.
 
 Options:
+
+  --command <cmd>             use the provided command instead of 'ssh' when
+                              waiting for ssh reachable instances
 
   --context <path>            path of the context file (default: '%s')
 
@@ -204,7 +210,13 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 	}
 
 	if !found || (exited && (exitcode != 0)) {
-		builder = BuildSshProcess(instance, []string{"true"})
+		if *waitParams.OptionCommand == "" {
+			builder = BuildSshProcess(instance, []string{"true"})
+		} else {
+			builder = BuildCustomSshProcess(instance,
+				strings.Split(*waitParams.OptionCommand, " "),
+				[]string{"true"})
+		}
 
 		if !timeout.IsNone() {
 			if timeout.RemainingSeconds() > 15 {
@@ -240,6 +252,18 @@ func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 	}
 
 	for {
+		line, has = proc.TryReadStdout()
+		if !has {
+			break
+		}
+
+		if *waitParams.OptionCommand != "" {
+			fmt.Fprintf(os.Stdout, "[%s] %s", instance.Name,
+				line)
+		}
+	}
+
+	for {
 		line, has = proc.TryReadStderr()
 		if !has {
 			break
@@ -247,6 +271,9 @@ func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 
 		if *waitParams.OptionVerbose {
 			fmt.Fprintf(os.Stderr, "[ssh:%s] %s", instance.Name,
+				line)
+		} else if *waitParams.OptionCommand != "" {
+			fmt.Fprintf(os.Stderr, "[%s] %s", instance.Name,
 				line)
 		}
 	}
@@ -441,6 +468,7 @@ func Wait(args []string) {
 	var success bool
 	var err error
 
+	waitParams.OptionCommand = flags.String("command", DEFAULT_WAIT_COMMAND, "")
 	waitParams.OptionContext = flags.String("context", DEFAULT_WAIT_CONTEXT, "")
 	waitParams.OptionCount = flags.String("count", DEFAULT_WAIT_COUNT, "")
 	waitParams.OptionTimeout = flags.String("timeout", DEFAULT_WAIT_TIMEOUT, "")
