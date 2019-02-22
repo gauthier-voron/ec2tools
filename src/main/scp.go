@@ -40,8 +40,13 @@ Return zero if all copies success. Otherwise, return a non zero exit status and
 print failing instances errors.
 
 Options:
+
+  --command <cmd>             use the provided command instead of 'scp'
+
   --context <path>            path of the context file (default: '%s')
+
   --user <user-name>          user to ssh connect to instances (default: contextual)
+
   --verbose                   print scp debug output in case of failure
 `,
 		PROGNAME, PROGNAME, PROGNAME,
