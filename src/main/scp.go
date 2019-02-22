@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 func PrintScpUsage() {
@@ -55,13 +56,23 @@ Options:
 // target operands (see man scp).
 //
 func buildScpCmdline(operands []string) []string {
-	var cmdline []string = []string{"scp",
-		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
-		"-o", "UserKnownHostsFile=/dev/null", "-r",
+	var cmdline []string
+
+	if *optionCommand == "" {
+		cmdline = append(cmdline, "scp")
+	} else {
+		cmdline = strings.Split(*optionCommand, " ")
+	}
+
+	if cmdline[0] == "scp" {
+		cmdline = append(cmdline, "-o", "StrictHostKeyChecking=no")
+		cmdline = append(cmdline, "-o", "LogLevel=Quiet")
+		cmdline = append(cmdline, "-o", "UserKnownHostsFile=/dev/null")
+		cmdline = append(cmdline, "-r")
 	}
 
 	if *optionVerbose {
-		cmdline = append(cmdline, "-vvv")
+		cmdline = append(cmdline, "-v")
 	}
 
 	cmdline = append(cmdline, operands...)
@@ -343,6 +354,7 @@ func Scp(args []string) {
 	var err error
 	var pos int
 
+	optionCommand = flags.String("command", "", "")
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionUser = flags.String("user", "", "")
 	optionVerbose = flags.Bool("verbose", DEFAULT_VERBOSE, "")
