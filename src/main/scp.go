@@ -75,15 +75,49 @@ func buildScpCmdline(operands []string) []string {
 // corresponding *Ec2Instance (the key of the specified map) and return 1.
 //
 func runProcesses(processes map[*Ec2Instance]*Process) int {
+	var pout chan []string = make(chan []string, len(processes))
+	var perr chan []string = make(chan []string, len(processes))
 	var instance *Ec2Instance
 	var exitcode, pcode int
 	var process *Process
 	var line string
 	var found bool
 
-	for _, process = range processes {
+	for instance, process = range processes {
 		process.Start()
+
+		go func(i *Ec2Instance, p *Process) {
+			for {
+				line, has := p.ReadStdout()
+				if !has {
+					break
+				}
+				pout <- []string{i.Name, line}
+			}
+		}(instance, process)
+
+		go func(i *Ec2Instance, p *Process) {
+			for {
+				line, has := p.ReadStderr()
+				if !has {
+					break
+				}
+				perr <- []string{i.Name, line}
+			}
+		}(instance, process)
 	}
+
+	go func() {
+		for pair := range pout {
+			fmt.Printf("[%s] %s", pair[0], pair[1])
+		}
+	}()
+
+	go func() {
+		for pair := range perr {
+			fmt.Fprintf(os.Stderr, "[%s] %s", pair[0], pair[1])
+		}
+	}()
 
 	exitcode = 0
 	for instance, process = range processes {
@@ -103,6 +137,9 @@ func runProcesses(processes map[*Ec2Instance]*Process) int {
 			}
 		}
 	}
+
+	close(pout)
+	close(perr)
 
 	return exitcode
 }
