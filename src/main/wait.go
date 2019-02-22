@@ -52,6 +52,9 @@ If no fleet specification is supplied, wait for all fleets.
 
 Options:
 
+  --command <cmd>             use the provided command instead of 'ssh' when
+                              waiting for ssh reachable instances
+
   --context <path>            path of the context file (default: '%s')
 
   --count <count|proportion>  the minimum count of instances per fleet
