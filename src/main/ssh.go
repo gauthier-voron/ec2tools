@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
+var DEFAULT_COMMAND string = ""
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
 var DEFAULT_TIMEOUT int64 = -1
 var DEFAULT_VERBOSE bool = false
 
+var optionCommand *string
 var optionErrmode *string
 var optionExtmode *string
 var optionOutmode *string
@@ -525,11 +528,13 @@ func doSsh(instances *Ec2Selection, cmdline []string) {
 			cmdargs = cmdline
 		}
 
-		builder = BuildSshProcess(instance, cmdargs)
-
-		if *optionTimeout >= 0 {
-			builder.Timeout(int(*optionTimeout))
+		if *optionCommand != "" {
+			builder = BuildCustomSshProcess(instance,
+				strings.Split(*optionCommand, " "), cmdargs)
+		} else {
+			builder = BuildSshProcess(instance, cmdargs)
 		}
+
 		if *optionUser != "" {
 			builder.User(*optionUser)
 		}
@@ -579,6 +584,7 @@ func Ssh(args []string) {
 	var arg string
 	var err error
 
+	optionCommand = flags.String("command", "", "")
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionErrmode = flags.String("error-mode", DEFAULT_ERRMODE, "")
 	optionExtmode = flags.String("exit-mode", DEFAULT_EXTMODE, "")
