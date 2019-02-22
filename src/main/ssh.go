@@ -33,13 +33,14 @@ In each case, the instances output are aggregated.
 The aggregation behavior is controlled by the options (see Modes).
 
 Options:
+  --command <cmd>             use a custom ssh command
   --context <path>            path of the context file (default: '%s')
   --error-mode <stream-mode>  stream-mode of the stderr (default: '%s')
   --exit-mode <exit-mode>     exit-mode used (default: '%s')
   --format                    interpret the cmd and args as printf format
   --output-mode <stream-mode> stream-mode of the stdout (default: '%s')
-  --timeout <sec>             cancel commands after <sec> seconds (default: %d)
-  --user <user-name>          user to ssh connect to instances (default: contextual)
+  --timeout <sec>             cancel the ssh commands after <sec> timeout
+  --user <user-name>          use a custom user name for the ssh connection
   --verbose                   print ssh debug output
 
 Modes:
@@ -61,7 +62,7 @@ Modes:
                               the greatest exit code.
 `,
 		PROGNAME, DEFAULT_CONTEXT, DEFAULT_ERRMODE, DEFAULT_EXTMODE,
-		DEFAULT_OUTMODE, DEFAULT_TIMEOUT,
+		DEFAULT_OUTMODE,
 		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
