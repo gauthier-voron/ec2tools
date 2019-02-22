@@ -72,6 +72,7 @@ Modes:
 //
 type SshProcessBuilder struct {
 	instance *Ec2Instance // remote instance to execute on
+	sshcmd   []string     // ssh command to execute locally
 	cmdline  []string     // command to execute on remote instance
 	timeout  *int         // optional timeout (in seconds)
 	user     *string      // optional ssh user
@@ -86,6 +87,25 @@ func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder
 	var this SshProcessBuilder
 
 	this.instance = instance
+	this.cmdline = cmdline
+	this.timeout = nil
+	this.user = nil
+	this.verbose = false
+
+	this.sshcmd = []string{"ssh"}
+
+	return &this
+}
+
+// Create a new SshProcessBuilder for the specified instance and doing the
+// specified command line.
+// The optional values receive their default values.
+//
+func BuildCustomSshProcess(instance *Ec2Instance, sshcmd, cmdline []string) *SshProcessBuilder {
+	var this SshProcessBuilder
+
+	this.instance = instance
+	this.sshcmd = sshcmd
 	this.cmdline = cmdline
 	this.timeout = nil
 	this.user = nil
@@ -122,18 +142,21 @@ func (this *SshProcessBuilder) Verbose() *SshProcessBuilder {
 //
 func (this *SshProcessBuilder) Build() *Process {
 	var sshuser, dest string
-	var sshcmd []string = []string{"ssh",
-		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
-		"-o", "UserKnownHostsFile=/dev/null",
+	var cmd []string = this.sshcmd
+
+	if cmd[0] == "ssh" {
+		cmd = append(cmd, "-o", "StrictHostKeyChecking=no")
+		cmd = append(cmd, "-o", "LogLevel=Quiet")
+		cmd = append(cmd, "-o", "UserKnownHostsFile=/dev/null")
 	}
 
 	if this.timeout != nil {
-		sshcmd = append(sshcmd, "-o",
+		cmd = append(cmd, "-o",
 			fmt.Sprintf("ConnectTimeout=%d", *this.timeout))
 	}
 
 	if this.verbose {
-		sshcmd = append(sshcmd, "-v")
+		cmd = append(cmd, "-v")
 	}
 
 	if this.user != nil {
@@ -144,10 +167,10 @@ func (this *SshProcessBuilder) Build() *Process {
 
 	dest = sshuser + "@" + this.instance.PublicIp
 
-	sshcmd = append(sshcmd, dest)
-	sshcmd = append(sshcmd, this.cmdline...)
+	cmd = append(cmd, dest)
+	cmd = append(cmd, this.cmdline...)
 
-	return NewProcess(sshcmd)
+	return NewProcess(cmd)
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
