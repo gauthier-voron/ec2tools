@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,7 @@ const (
 )
 
 type waitParameters struct {
+	OptionCommand *string
 	OptionContext *string
 	OptionCount   *string
 	OptionTimeout *string
@@ -20,6 +22,7 @@ type waitParameters struct {
 	OptionWaitFor *string
 }
 
+var DEFAULT_WAIT_COMMAND string = ""
 var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
 var DEFAULT_WAIT_COUNT string = "100%"
 var DEFAULT_WAIT_TIMEOUT string = ""
@@ -204,7 +207,13 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 	}
 
 	if !found || (exited && (exitcode != 0)) {
-		builder = BuildSshProcess(instance, []string{"true"})
+		if *waitParams.OptionCommand == "" {
+			builder = BuildSshProcess(instance, []string{"true"})
+		} else {
+			builder = BuildCustomSshProcess(instance,
+				strings.Split(*waitParams.OptionCommand, " "),
+				[]string{"true"})
+		}
 
 		if !timeout.IsNone() {
 			if timeout.RemainingSeconds() > 15 {
@@ -441,6 +450,7 @@ func Wait(args []string) {
 	var success bool
 	var err error
 
+	waitParams.OptionCommand = flags.String("command", DEFAULT_WAIT_COMMAND, "")
 	waitParams.OptionContext = flags.String("context", DEFAULT_WAIT_CONTEXT, "")
 	waitParams.OptionCount = flags.String("count", DEFAULT_WAIT_COUNT, "")
 	waitParams.OptionTimeout = flags.String("timeout", DEFAULT_WAIT_TIMEOUT, "")
