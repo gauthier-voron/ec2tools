@@ -196,13 +196,14 @@ print_header
 
 ask "Ssh key to use for AWS instances" TEST_KEY
 ask "Price to use for AWS instances (USD)" TEST_PRICE
+ask "Name to use for created AWS images" TEST_IMAGE
 
 
 # Step 3: Write the configuration on disk
 # Dump all the assigned variables to the config file.
 #
 
-dump_config TEST_KEY TEST_PRICE > "${CONFIG_PATH}"
+dump_config TEST_KEY TEST_PRICE TEST_IMAGE > "${CONFIG_PATH}"
 print_footer
 
 exit 0
