@@ -33,6 +33,7 @@ from simple bash scripts.
 
 Commands:
   describe     describe a saved base image
+  drop         deregister a saved base image
   get          obtain information on fleets or instances
   help         display help on a specific command
   launch       launch a new fleet of instances
@@ -77,6 +78,8 @@ func main() {
 
 	if command == "describe" {
 		Describe(flag.Args())
+	} else if command == "drop" {
+		Drop(flag.Args())
 	} else if command == "get" {
 		Get(flag.Args())
 	} else if command == "help" {

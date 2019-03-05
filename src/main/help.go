@@ -28,6 +28,8 @@ func Help(args []string) {
 
 	if command == "describe" {
 		PrintDescribeUsage()
+	} else if command == "drop" {
+		PrintDropUsage()
 	} else if command == "get" {
 		PrintGetUsage()
 	} else if command == "help" {
