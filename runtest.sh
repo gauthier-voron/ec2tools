@@ -312,7 +312,7 @@ usage() {
 # Print version information for this script on stdout.
 #
 version() {
-    printf "%s %s\n" 'runtest.sh' '1.0.0'
+    printf "%s %s\n" 'runtest.sh' '1.1.0'
     printf "%s\n" 'Gauthier Voron'
     printf "%s\n" '<gauthier.voron@sydney.edu.au>'
 }
