@@ -148,6 +148,43 @@ func (this *Image) Refresh() error {
 	return nil
 }
 
+// Copy this image to the specified region.
+// The new copy receive the specified name and description.
+// The region may be equals to the region of this Image.
+// The name and description can be equals to the ones of another image.
+// If the copy succeed, return a new Image with a "" State.
+// Otherwise, return no Image and an error.
+//
+func (this *Image) Copy(region, name, description string) (*Image, error) {
+	var rep *ec2.CopyImageOutput
+	var req ec2.CopyImageInput
+	var sess *session.Session
+	var client *ec2.EC2
+	var copy Image
+	var err error
+
+	req.SourceImageId = aws.String(this.Id)
+	req.Description = aws.String(description)
+	req.Name = aws.String(name)
+	req.SourceRegion = aws.String(this.Region)
+
+	sess = session.New()
+	client = ec2.New(sess, &aws.Config{Region: aws.String(region)})
+
+	rep, err = client.CopyImage(&req)
+	if err != nil {
+		return nil, err
+	}
+
+	copy.Id = *rep.ImageId
+	copy.Name = name
+	copy.Description = description
+	copy.State = ""
+	copy.Region = region
+
+	return &copy, nil
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
