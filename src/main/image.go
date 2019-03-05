@@ -417,6 +417,22 @@ func (this *ImageList) Find(id string, regions ...string) error {
 	return this.fetchWith(&req, regions...)
 }
 
+// Add or update an existing Image object to this list.
+// Make no use of network in this method.
+//
+func (this *ImageList) Add(image *Image) {
+	this.Images[image.Id] = image
+}
+
+// Remove an image from Images of this list.
+// Does nothing if the given image or any image with the same Id is not in this
+// list.
+// Make no use of network in this method.
+//
+func (this *ImageList) Remove(image *Image) {
+	delete(this.Images, image.Id)
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
