@@ -5,6 +5,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"strings"
+	"time"
+)
+
+const (
+	IMAGE_STATE_PENDING   string = "pending"
+	IMAGE_STATE_AVAILABLE string = "available"
 )
 
 // Test if an image specification is an image id.
@@ -203,6 +209,49 @@ func (this *Image) Deregister() error {
 	_, err = client.DeregisterImage(&req)
 	return err
 
+}
+
+// Wait for this image to be either "pending" or "available".
+// User can specify a Timeout for how long to wait (possibly NewTimeoutNone()).
+// Return a boolean to indicate if the image is in the desired state at the
+// return of the function and an error to indicate if something gone wrong.
+//
+func (this *Image) WaitPending(t *Timeout) (bool, error) {
+	return this.waitState(t, IMAGE_STATE_PENDING, IMAGE_STATE_AVAILABLE)
+}
+
+// Wait for this image to be "available".
+// User can specify a Timeout for how long to wait (possibly NewTimeoutNone()).
+// Return a boolean to indicate if the image is in the desired state at the
+// return of the function and an error to indicate if something gone wrong.
+//
+func (this *Image) WaitAvailable(t *Timeout) (bool, error) {
+	return this.waitState(t, IMAGE_STATE_AVAILABLE)
+}
+
+// Wait for this Image to be in one of the specified states.
+// Inner function behind WaitPending() and WaitState()
+//
+func (this *Image) waitState(t *Timeout, states ...string) (bool, error) {
+	var state string
+	var err error
+
+	for !t.IsOver() {
+		for _, state = range states {
+			if this.State == state {
+				return true, nil
+			}
+		}
+
+		time.Sleep(1000 * time.Millisecond)
+
+		err = this.Refresh()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return false, nil
 }
 
 // An error indicating that another image with the same name already exists.
