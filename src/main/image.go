@@ -254,6 +254,26 @@ func (this *Image) waitState(t *Timeout, states ...string) (bool, error) {
 	return false, nil
 }
 
+// A deduplicated list of images from various regions.
+// The goal of this structure is to manipulate several Image objects in
+// parallel. For instance, refreshing several images in parallel instead of
+// sequentially.
+//
+type ImageList struct {
+	Images map[string]*Image
+}
+
+// Create a new empty ImageList.
+// This function never fails.
+//
+func NewImageList() *ImageList {
+	var this ImageList
+
+	this.Images = make(map[string]*Image)
+
+	return &this
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
