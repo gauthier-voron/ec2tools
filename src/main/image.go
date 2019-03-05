@@ -97,6 +97,57 @@ func NewImage(region, id string) *Image {
 	return &this
 }
 
+// Update the fields of the Image by asking to AWS EC2 servers.
+// Fetch the most up-to-date Name, Description and State from the AWS EC2
+// servers.
+// This operation never modify the Id or the Region.
+// Return nil if the update succeed and if the image still exists./
+// If the update succeed but the image does not exist anymore, return am
+// ImageUnknownError.
+//
+func (this *Image) Refresh() error {
+	var rep *ec2.DescribeImagesOutput
+	var req ec2.DescribeImagesInput
+	var sess *session.Session
+	var image *ec2.Image
+	var client *ec2.EC2
+	var err error
+
+	sess = session.New()
+	client = ec2.New(sess, &aws.Config{Region: aws.String(this.Region)})
+
+	req.ImageIds = []*string{aws.String(this.Id)}
+
+	rep, err = client.DescribeImages(&req)
+	if err != nil {
+		return err
+	} else if len(rep.Images) < 1 {
+		return NewImageUnknownError()
+	} else if len(rep.Images) > 1 {
+		panic("should not happen")
+	} else if *rep.Images[0].ImageId != this.Id {
+		panic("should not happen")
+	}
+
+	image = rep.Images[0]
+
+	if image.Name != nil {
+		this.Name = *image.Name
+	} else {
+		this.Name = ""
+	}
+
+	if image.Description != nil {
+		this.Description = *image.Description
+	} else {
+		this.Description = ""
+	}
+
+	this.State = *image.State
+
+	return nil
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
@@ -114,3 +165,20 @@ func (this *ImageDuplicateError) Error() string {
 	return "ImageDuplicateError"
 }
 
+// An error indicating that no image with this name or id exist (in a given
+// region).
+//
+type ImageUnknownError struct {
+}
+
+// Create a new ImageUnknownError.
+//
+func NewImageUnknownError() *ImageUnknownError {
+	return &ImageUnknownError{}
+}
+
+// Make ImageUnknownError to be an error.
+//
+func (this *ImageUnknownError) Error() string {
+	return "ImageUnknownError"
+}
