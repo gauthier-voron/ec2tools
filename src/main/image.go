@@ -1,5 +1,12 @@
 package main
 
+import (
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"strings"
+)
+
 // Test if an image specification is an image id.
 // A string starting with "ami-" is an image id. Otherwise, it's not.
 //
@@ -28,6 +35,52 @@ type Image struct {
 	Region      string // where the image can be used
 }
 
+// Create a new image from the specified instance.
+// Use the image of the specified instance as a template to create a new image.
+// The instance should not be used during this operation.
+// Create the image in the region of the instance.
+// User supplies human readable name and description.
+// Provided name must be different from any other instance in the same region
+// (this constraint only exists for image creation).
+// Return the new image and a possible error.
+//
+func CreateImage(instance *Ec2Instance, name, description string) (*Image, error) {
+	var errtxt string = "InvalidAMIName.Duplicate: AMI name"
+	var region string = instance.Fleet.Region
+	var req ec2.CreateImageInput
+	var rep *ec2.CreateImageOutput
+	var sess *session.Session
+	var client *ec2.EC2
+	var this Image
+	var err error
+
+	sess = session.New()
+	client = ec2.New(sess, &aws.Config{
+		Region: aws.String(region),
+	})
+
+	req.InstanceId = aws.String(instance.Name)
+	req.Name = aws.String(name)
+	req.Description = aws.String(description)
+
+	rep, err = client.CreateImage(&req)
+	if err != nil {
+		if strings.Index(err.Error(), errtxt) == 0 {
+			return nil, NewImageDuplicateError()
+		} else {
+			return nil, err
+		}
+	}
+
+	this.Id = *rep.ImageId
+	this.Name = name
+	this.Description = description
+	this.State = ""
+	this.Region = region
+
+	return &this, nil
+}
+
 // Create a new image with a given id on the given region.
 // Useful to create a local object without any network operation, then refresh
 // it later if needed.
@@ -42,5 +95,22 @@ func NewImage(region, id string) *Image {
 	this.Region = region
 
 	return &this
+}
+
+// An error indicating that another image with the same name already exists.
+//
+type ImageDuplicateError struct {
+}
+
+// Create a new ImageDuplicateError.
+//
+func NewImageDuplicateError() *ImageDuplicateError {
+	return &ImageDuplicateError{}
+}
+
+// Make ImageDuplicateError to be an error.
+//
+func (this *ImageDuplicateError) Error() string {
+	return "ImageDuplicateError"
 }
 
