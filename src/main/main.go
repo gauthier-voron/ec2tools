@@ -32,6 +32,7 @@ Provide a convenient way to use Amazon EC2 spot instances over several regions
 from simple bash scripts.
 
 Commands:
+  describe     describe a saved base image
   get          obtain information on fleets or instances
   help         display help on a specific command
   launch       launch a new fleet of instances
@@ -74,7 +75,9 @@ func main() {
 
 	command = flag.Args()[0]
 
-	if command == "get" {
+	if command == "describe" {
+		Describe(flag.Args())
+	} else if command == "get" {
 		Get(flag.Args())
 	} else if command == "help" {
 		Help(flag.Args())

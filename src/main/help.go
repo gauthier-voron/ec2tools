@@ -26,7 +26,9 @@ func Help(args []string) {
 
 	command = args[1]
 
-	if command == "get" {
+	if command == "describe" {
+		PrintDescribeUsage()
+	} else if command == "get" {
 		PrintGetUsage()
 	} else if command == "help" {
 		PrintHelpUsage()
