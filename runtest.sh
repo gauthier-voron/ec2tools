@@ -280,10 +280,11 @@ run_test() {
     dir=$(cat "$dirfile")
     rm "$pidfile" "$dirfile"
 
-    wait_script "$pid" 90 "$script"
+    wait_script "$pid" 600 "$script"
     ret=$?
 
-    ec2tools stop 2> /dev/null
+    ./ec2tools stop 2> /dev/null
+    ./ec2tools drop "${TEST_IMAGE}/"'*' 2> /dev/null
 
     account_ret "$script" $ret "$logfile"
 

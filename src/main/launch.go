@@ -12,9 +12,9 @@ import (
 
 var IAM_FLEET_ROLE string = "arn:aws:iam::965630252549:role/aws-ec2-spot-fleet-tagging-role"
 
-var DEFAULT_IMAGE string = "ami-33ab5251"
+var DEFAULT_IMAGE string = "ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114"
 var DEFAULT_KEY string = "default"
-var DEFAULT_PRICE float64 = 0.01
+var DEFAULT_PRICE float64 = 1
 var DEFAULT_REGION string = "ap-southeast-2"
 var DEFAULT_REPLACE bool = false
 var DEFAULT_SECGROUP string = "sg-0e9b9bbee1dfc700a"
@@ -44,17 +44,30 @@ The fleet receives the given name and can be referred with this name in further
 commands.
 
 Options:
+
   --context <path>            path of the context file (default: '%s')
-  --image <id>                id of the instance image (default: '%s')
+
+  --image <id | name>         name of the instance image or id if it starts by
+                              'ami-' (default: '%s')
+
   --key <key-name>            name of the ssh key to use (default: '%s')
+
   --price <float>             maximum price per unit hour (default: %f)
+
   --region <region-name>      region where to launch instances (default: '%s')
+
   --replace                   replace the fleet with the same name if any
+
   --secgroup <id>             id of the security group to use (default: '%s')
+
   --size <int>                number of instances in the fleet (default: %d)
+
   --time <timespec>           maximum life duration of the fleet (default: '%s')
+
   --type <instance-type>      type of instance (default: '%s')
+
   --user <user-name>          user to ssh connect to instances (default: '%s')
+
 `,
 		PROGNAME, DEFAULT_CONTEXT, DEFAULT_IMAGE, DEFAULT_KEY,
 		DEFAULT_PRICE, DEFAULT_REGION, DEFAULT_SECGROUP, DEFAULT_SIZE,
@@ -66,8 +79,43 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	var conf ec2.SpotFleetRequestConfigData
 	var req ec2.RequestSpotFleetInput
 	var until time.Time = launchProcOptionTime.DeadlineDate()
+	var ilist *ImageList
+	var image *Image
+	var err error
 
-	spec.ImageId = optionImage
+	if IsImageId(*optionImage) {
+		spec.ImageId = aws.String(*optionImage)
+	} else {
+		ilist = NewImageList()
+
+		err = ilist.Fetch(*optionImage, *optionRegion)
+		if err != nil {
+			Error("cannot use image '%s': %s", *optionImage,
+				err.Error())
+		}
+
+		if len(ilist.Images) > 1 {
+			Error("more than one image named '%s' in region %s",
+				*optionImage, *optionRegion)
+		}
+
+		_, err = ilist.WaitAvailable(NewTimeoutNone())
+		if err != nil {
+			Error("cannot wait image '%s' to be available",
+				*optionImage)
+		}
+
+		if len(ilist.Images) < 1 {
+			Error("no image named '%s' in region %s",
+				*optionImage, *optionRegion)
+		}
+
+		for _, image = range ilist.Images {
+			spec.ImageId = aws.String(image.Id)
+			break
+		}
+	}
+
 	spec.InstanceType = optionType
 	spec.KeyName = optionKey
 	spec.SecurityGroups = []*ec2.GroupIdentifier{
