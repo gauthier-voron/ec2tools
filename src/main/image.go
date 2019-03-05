@@ -185,6 +185,26 @@ func (this *Image) Copy(region, name, description string) (*Image, error) {
 	return &copy, nil
 }
 
+// Remove this Image from the AWS EC2 servers.
+// This only invokes the EC2 deregister function and report any error that
+// occured.
+//
+func (this *Image) Deregister() error {
+	var req ec2.DeregisterImageInput
+	var sess *session.Session
+	var client *ec2.EC2
+	var err error
+
+	sess = session.New()
+	client = ec2.New(sess, &aws.Config{Region: aws.String(this.Region)})
+
+	req.ImageId = aws.String(this.Id)
+
+	_, err = client.DeregisterImage(&req)
+	return err
+
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
