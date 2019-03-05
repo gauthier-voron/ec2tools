@@ -386,6 +386,37 @@ func (this *ImageList) fetchWith(req *ec2.DescribeImagesInput, regions ...string
 	return err
 }
 
+// Fetch images of the given name from the specified regions.
+// If no region is provided, fetch from any possible region.
+// Update the Images field.
+// This method does not remove any image from Images.
+// Return nil if everything goes well, an error otherwise.
+//
+func (this *ImageList) Fetch(name string, regions ...string) error {
+	var req ec2.DescribeImagesInput
+	var filter ec2.Filter
+
+	filter.Name = aws.String("name")
+	filter.Values = []*string{aws.String(name)}
+	req.Filters = []*ec2.Filter{&filter}
+
+	return this.fetchWith(&req, regions...)
+}
+
+// Fetch images with the given id from the specified regions.
+// If no region is provided, fetch from any possible region.
+// Update the Images field.
+// This method does not remove any image from Images.
+// Return nil if everything goes well, an error otherwise.
+//
+func (this *ImageList) Find(id string, regions ...string) error {
+	var req ec2.DescribeImagesInput
+
+	req.ImageIds = []*string{aws.String(id)}
+
+	return this.fetchWith(&req, regions...)
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
