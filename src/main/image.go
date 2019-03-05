@@ -460,6 +460,84 @@ func (this *ImageList) Deregister() error {
 	return err
 }
 
+// Wait for every images in this list to be in State "pending" or "available".
+// Stop waiting after the given timeout expires.
+// Return true if all the images are in the desired state after the method
+// returns, false otherwise.
+// If something goes wrong, also return an error.
+//
+func (this *ImageList) WaitPending(t *Timeout) (bool, error) {
+	return this.waitState(t, IMAGE_STATE_PENDING, IMAGE_STATE_AVAILABLE)
+}
+
+// Wait for every images in this list to be in State "available".
+// Stop waiting after the given timeout expires.
+// Return true if all the images are in the desired state after the method
+// returns, false otherwise.
+// If something goes wrong, also return an error.
+//
+func (this *ImageList) WaitAvailable(t *Timeout) (bool, error) {
+	return this.waitState(t, IMAGE_STATE_AVAILABLE)
+}
+
+// Wait for every images in this list to be in on of the specified state.
+// Stop waiting after the given timeout expires.
+// Return true if all the images are in the desired state after the method
+// returns, false otherwise.
+// If something goes wrong, also return an error.
+//
+func (this *ImageList) waitState(t *Timeout, states ...string) (bool, error) {
+	var errchan chan error = make(chan error, len(this.Images))
+	var image *Image
+	var state string
+	var err error
+	var ok bool
+
+	for !t.IsOver() {
+		ok = true
+		for _, image = range this.Images {
+			ok = false
+			for _, state = range states {
+				if image.State == state {
+					ok = true
+					break
+				}
+			}
+
+			if !ok {
+				break
+			}
+		}
+
+		if ok {
+			return true, nil
+		}
+
+		time.Sleep(1000 * time.Millisecond)
+
+		for _, image = range this.Images {
+			go func(image *Image) {
+				errchan <- image.Refresh()
+			}(image)
+		}
+
+		err = nil
+		for _, _ = range this.Images {
+			if err == nil {
+				err = <-errchan
+			} else {
+				<-errchan
+			}
+		}
+
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return false, nil
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
