@@ -13,6 +13,27 @@ const (
 	IMAGE_STATE_AVAILABLE string = "available"
 )
 
+// List of available EC2 regions
+//
+var fetchRegion []string = []string{
+	"ap-northeast-1",
+	"ap-northeast-2",
+	"ap-south-1",
+	"ap-southeast-1",
+	"ap-southeast-2",
+	"ca-central-1",
+	"eu-central-1",
+	"eu-north-1",
+	"eu-west-1",
+	"eu-west-2",
+	"eu-west-3",
+	"us-east-1",
+	"us-east-2",
+	"us-west-1",
+	"us-west-2",
+	"sa-east-1",
+}
+
 // Test if an image specification is an image id.
 // A string starting with "ami-" is an image id. Otherwise, it's not.
 //
@@ -272,6 +293,97 @@ func NewImageList() *ImageList {
 	this.Images = make(map[string]*Image)
 
 	return &this
+}
+
+// Fetch images for a given EC2 description from a given region.
+// Return a list of fetched Image if everything goes well or an error
+// otherwise.
+//
+func (this *ImageList) fetchFrom(req *ec2.DescribeImagesInput, region string) ([]*Image, error) {
+	var rep *ec2.DescribeImagesOutput
+	var sess *session.Session
+	var image *ec2.Image
+	var client *ec2.EC2
+	var rimage *Image
+	var ret []*Image
+	var err error
+
+	sess = session.New()
+	client = ec2.New(sess, &aws.Config{Region: aws.String(region)})
+
+	rep, err = client.DescribeImages(req)
+	if err != nil {
+		return ret, err
+	}
+
+	for _, image = range rep.Images {
+		rimage = &Image{}
+		rimage.Id = *image.ImageId
+		rimage.Name = *image.Name
+		rimage.Description = *image.Description
+		rimage.State = *image.State
+		rimage.Region = region
+		ret = append(ret, rimage)
+	}
+
+	return ret, nil
+}
+
+// Run the fetchFrom() method on several regions in parallel.
+// If no region is provided, fetch from every possible regions.
+// Update the Images field of this list with the return of each fetchFrom()
+// call.
+// Return the first error encountered or nil if no error happens.
+//
+func (this *ImageList) fetchWith(req *ec2.DescribeImagesInput, regions ...string) error {
+	var errtxt string = "InvalidAMIID.NotFound"
+	var retchan chan []*Image
+	var errchan chan error
+	var images []*Image
+	var region string
+	var image *Image
+	var err error
+
+	if len(regions) == 0 {
+		regions = fetchRegion
+	}
+
+	retchan = make(chan []*Image, len(regions))
+	errchan = make(chan error, len(regions))
+
+	for _, region = range regions {
+		go func(region string) {
+			var ret []*Image
+			var err error
+
+			ret, err = this.fetchFrom(req, region)
+
+			retchan <- ret
+			errchan <- err
+		}(region)
+	}
+
+	err = nil
+
+	for _, _ = range regions {
+		images = <-retchan
+		for _, image = range images {
+			this.Images[image.Id] = image
+		}
+
+		if err == nil {
+			err = <-errchan
+			if err != nil {
+				if strings.Index(err.Error(), errtxt) == 0 {
+					err = nil
+				}
+			}
+		} else {
+			<-errchan
+		}
+	}
+
+	return err
 }
 
 // An error indicating that another image with the same name already exists.
