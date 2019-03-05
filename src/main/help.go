@@ -32,6 +32,8 @@ func Help(args []string) {
 		PrintHelpUsage()
 	} else if command == "launch" {
 		PrintLaunchUsage()
+	} else if command == "save" {
+		PrintSaveUsage()
 	} else if command == "scp" {
 		PrintScpUsage()
 	} else if command == "set" {

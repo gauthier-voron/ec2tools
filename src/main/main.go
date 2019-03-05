@@ -35,6 +35,7 @@ Commands:
   get          obtain information on fleets or instances
   help         display help on a specific command
   launch       launch a new fleet of instances
+  save         save an instance as a base image
   stop         stop one, several or all instances
   scp          copy files from and to instances
   set          add information on fleets or instances
@@ -79,6 +80,8 @@ func main() {
 		Help(flag.Args())
 	} else if command == "launch" {
 		Launch(flag.Args())
+	} else if command == "save" {
+		Save(flag.Args())
 	} else if command == "scp" {
 		Scp(flag.Args())
 	} else if command == "set" {
