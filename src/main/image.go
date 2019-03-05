@@ -433,6 +433,33 @@ func (this *ImageList) Remove(image *Image) {
 	delete(this.Images, image.Id)
 }
 
+// Deregister every images of this list.
+// Return an error if something gone wrong.
+//
+func (this *ImageList) Deregister() error {
+	var errchan chan error = make(chan error, len(this.Images))
+	var image *Image
+	var err error
+
+	for _, image = range this.Images {
+		go func(image *Image) {
+			errchan <- image.Deregister()
+		}(image)
+	}
+
+	err = nil
+
+	for _, _ = range this.Images {
+		if err == nil {
+			err = <-errchan
+		} else {
+			<-errchan
+		}
+	}
+
+	return err
+}
+
 // An error indicating that another image with the same name already exists.
 //
 type ImageDuplicateError struct {
