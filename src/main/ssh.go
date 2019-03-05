@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
+var DEFAULT_COMMAND string = ""
 var DEFAULT_ERRMODE string = "all-prefix"
 var DEFAULT_EXTMODE string = "eager-greatest"
 var DEFAULT_OUTMODE string = "merge-parallel"
 var DEFAULT_TIMEOUT int64 = -1
 var DEFAULT_VERBOSE bool = false
 
+var optionCommand *string
 var optionErrmode *string
 var optionExtmode *string
 var optionOutmode *string
@@ -30,13 +33,14 @@ In each case, the instances output are aggregated.
 The aggregation behavior is controlled by the options (see Modes).
 
 Options:
+  --command <cmd>             use a custom ssh command
   --context <path>            path of the context file (default: '%s')
   --error-mode <stream-mode>  stream-mode of the stderr (default: '%s')
   --exit-mode <exit-mode>     exit-mode used (default: '%s')
   --format                    interpret the cmd and args as printf format
   --output-mode <stream-mode> stream-mode of the stdout (default: '%s')
-  --timeout <sec>             cancel commands after <sec> seconds (default: %d)
-  --user <user-name>          user to ssh connect to instances (default: contextual)
+  --timeout <sec>             cancel the ssh commands after <sec> timeout
+  --user <user-name>          use a custom user name for the ssh connection
   --verbose                   print ssh debug output
 
 Modes:
@@ -58,7 +62,7 @@ Modes:
                               the greatest exit code.
 `,
 		PROGNAME, DEFAULT_CONTEXT, DEFAULT_ERRMODE, DEFAULT_EXTMODE,
-		DEFAULT_OUTMODE, DEFAULT_TIMEOUT,
+		DEFAULT_OUTMODE,
 		DEFAULT_OUTMODE, DEFAULT_ERRMODE, DEFAULT_EXTMODE)
 }
 
@@ -72,6 +76,7 @@ Modes:
 //
 type SshProcessBuilder struct {
 	instance *Ec2Instance // remote instance to execute on
+	sshcmd   []string     // ssh command to execute locally
 	cmdline  []string     // command to execute on remote instance
 	timeout  *int         // optional timeout (in seconds)
 	user     *string      // optional ssh user
@@ -86,6 +91,25 @@ func BuildSshProcess(instance *Ec2Instance, cmdline []string) *SshProcessBuilder
 	var this SshProcessBuilder
 
 	this.instance = instance
+	this.cmdline = cmdline
+	this.timeout = nil
+	this.user = nil
+	this.verbose = false
+
+	this.sshcmd = []string{"ssh"}
+
+	return &this
+}
+
+// Create a new SshProcessBuilder for the specified instance and doing the
+// specified command line.
+// The optional values receive their default values.
+//
+func BuildCustomSshProcess(instance *Ec2Instance, sshcmd, cmdline []string) *SshProcessBuilder {
+	var this SshProcessBuilder
+
+	this.instance = instance
+	this.sshcmd = sshcmd
 	this.cmdline = cmdline
 	this.timeout = nil
 	this.user = nil
@@ -122,18 +146,21 @@ func (this *SshProcessBuilder) Verbose() *SshProcessBuilder {
 //
 func (this *SshProcessBuilder) Build() *Process {
 	var sshuser, dest string
-	var sshcmd []string = []string{"ssh",
-		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
-		"-o", "UserKnownHostsFile=/dev/null",
+	var cmd []string = this.sshcmd
+
+	if cmd[0] == "ssh" {
+		cmd = append(cmd, "-o", "StrictHostKeyChecking=no")
+		cmd = append(cmd, "-o", "LogLevel=Quiet")
+		cmd = append(cmd, "-o", "UserKnownHostsFile=/dev/null")
 	}
 
 	if this.timeout != nil {
-		sshcmd = append(sshcmd, "-o",
+		cmd = append(cmd, "-o",
 			fmt.Sprintf("ConnectTimeout=%d", *this.timeout))
 	}
 
 	if this.verbose {
-		sshcmd = append(sshcmd, "-vvv")
+		cmd = append(cmd, "-v")
 	}
 
 	if this.user != nil {
@@ -144,10 +171,10 @@ func (this *SshProcessBuilder) Build() *Process {
 
 	dest = sshuser + "@" + this.instance.PublicIp
 
-	sshcmd = append(sshcmd, dest)
-	sshcmd = append(sshcmd, this.cmdline...)
+	cmd = append(cmd, dest)
+	cmd = append(cmd, this.cmdline...)
 
-	return NewProcess(sshcmd)
+	return NewProcess(cmd)
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -502,11 +529,13 @@ func doSsh(instances *Ec2Selection, cmdline []string) {
 			cmdargs = cmdline
 		}
 
-		builder = BuildSshProcess(instance, cmdargs)
-
-		if *optionTimeout >= 0 {
-			builder.Timeout(int(*optionTimeout))
+		if *optionCommand != "" {
+			builder = BuildCustomSshProcess(instance,
+				strings.Split(*optionCommand, " "), cmdargs)
+		} else {
+			builder = BuildSshProcess(instance, cmdargs)
 		}
+
 		if *optionUser != "" {
 			builder.User(*optionUser)
 		}
@@ -556,6 +585,7 @@ func Ssh(args []string) {
 	var arg string
 	var err error
 
+	optionCommand = flags.String("command", "", "")
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionErrmode = flags.String("error-mode", DEFAULT_ERRMODE, "")
 	optionExtmode = flags.String("exit-mode", DEFAULT_EXTMODE, "")

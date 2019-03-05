@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 func PrintScpUsage() {
@@ -39,8 +40,13 @@ Return zero if all copies success. Otherwise, return a non zero exit status and
 print failing instances errors.
 
 Options:
+
+  --command <cmd>             use the provided command instead of 'scp'
+
   --context <path>            path of the context file (default: '%s')
+
   --user <user-name>          user to ssh connect to instances (default: contextual)
+
   --verbose                   print scp debug output in case of failure
 `,
 		PROGNAME, PROGNAME, PROGNAME,
@@ -55,13 +61,23 @@ Options:
 // target operands (see man scp).
 //
 func buildScpCmdline(operands []string) []string {
-	var cmdline []string = []string{"scp",
-		"-o", "StrictHostKeyChecking=no", "-o", "LogLevel=Quiet",
-		"-o", "UserKnownHostsFile=/dev/null", "-r",
+	var cmdline []string
+
+	if *optionCommand == "" {
+		cmdline = append(cmdline, "scp")
+	} else {
+		cmdline = strings.Split(*optionCommand, " ")
+	}
+
+	if cmdline[0] == "scp" {
+		cmdline = append(cmdline, "-o", "StrictHostKeyChecking=no")
+		cmdline = append(cmdline, "-o", "LogLevel=Quiet")
+		cmdline = append(cmdline, "-o", "UserKnownHostsFile=/dev/null")
+		cmdline = append(cmdline, "-r")
 	}
 
 	if *optionVerbose {
-		cmdline = append(cmdline, "-vvv")
+		cmdline = append(cmdline, "-v")
 	}
 
 	cmdline = append(cmdline, operands...)
@@ -75,15 +91,49 @@ func buildScpCmdline(operands []string) []string {
 // corresponding *Ec2Instance (the key of the specified map) and return 1.
 //
 func runProcesses(processes map[*Ec2Instance]*Process) int {
+	var pout chan []string = make(chan []string, len(processes))
+	var perr chan []string = make(chan []string, len(processes))
 	var instance *Ec2Instance
 	var exitcode, pcode int
 	var process *Process
 	var line string
 	var found bool
 
-	for _, process = range processes {
+	for instance, process = range processes {
 		process.Start()
+
+		go func(i *Ec2Instance, p *Process) {
+			for {
+				line, has := p.ReadStdout()
+				if !has {
+					break
+				}
+				pout <- []string{i.Name, line}
+			}
+		}(instance, process)
+
+		go func(i *Ec2Instance, p *Process) {
+			for {
+				line, has := p.ReadStderr()
+				if !has {
+					break
+				}
+				perr <- []string{i.Name, line}
+			}
+		}(instance, process)
 	}
+
+	go func() {
+		for pair := range pout {
+			fmt.Printf("[%s] %s", pair[0], pair[1])
+		}
+	}()
+
+	go func() {
+		for pair := range perr {
+			fmt.Fprintf(os.Stderr, "[%s] %s", pair[0], pair[1])
+		}
+	}()
 
 	exitcode = 0
 	for instance, process = range processes {
@@ -103,6 +153,9 @@ func runProcesses(processes map[*Ec2Instance]*Process) int {
 			}
 		}
 	}
+
+	close(pout)
+	close(perr)
 
 	return exitcode
 }
@@ -306,6 +359,7 @@ func Scp(args []string) {
 	var err error
 	var pos int
 
+	optionCommand = flags.String("command", "", "")
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionUser = flags.String("user", "", "")
 	optionVerbose = flags.Bool("verbose", DEFAULT_VERBOSE, "")

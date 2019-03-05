@@ -7,7 +7,7 @@ import (
 )
 
 var PROGNAME string = "ec2tools"
-var VERSION string = "2.0.0"
+var VERSION string = "2.1.0"
 var AUTHOR string = "Gauthier Voron"
 var MAILTO string = "gauthier.voron@sydney.edu.au"
 
@@ -32,9 +32,12 @@ Provide a convenient way to use Amazon EC2 spot instances over several regions
 from simple bash scripts.
 
 Commands:
+  describe     describe a saved base image
+  drop         deregister a saved base image
   get          obtain information on fleets or instances
   help         display help on a specific command
   launch       launch a new fleet of instances
+  save         save an instance as a base image
   stop         stop one, several or all instances
   scp          copy files from and to instances
   set          add information on fleets or instances
@@ -73,12 +76,18 @@ func main() {
 
 	command = flag.Args()[0]
 
-	if command == "get" {
+	if command == "describe" {
+		Describe(flag.Args())
+	} else if command == "drop" {
+		Drop(flag.Args())
+	} else if command == "get" {
 		Get(flag.Args())
 	} else if command == "help" {
 		Help(flag.Args())
 	} else if command == "launch" {
 		Launch(flag.Args())
+	} else if command == "save" {
+		Save(flag.Args())
 	} else if command == "scp" {
 		Scp(flag.Args())
 	} else if command == "set" {

@@ -69,6 +69,43 @@ ec2tools stop 'my-fleet-sydney'
 ec2tools stop 'my-fleet-ohio'
 ```
 
+#### Create a template image and use it to launch fleets:
+```
+# Launch a new fleet of 1 c5.large instance in Ohio
+ec2tools launch --key=my-aws-key --region=us-east-2 --image='ami-965e6bf3' \
+                --user='ubuntu' --type='c5.large' --price=1 --size=1    \
+                --secgroup='sg-98338af0' 'my-template-fleet'
+
+# Wait the fleet instances to be ready to receive ssh commands
+ec2tools wait
+
+# Modify the image
+ec2tools scp my-binaries my-libraries
+
+# Save the image of the fleet instance in both Ohio and Sydney
+ec2tools save --region='us-east-2,ap-southeast-2' 'my-ec2tools-image'
+
+# Stop the template fleet
+ec2tool stop
+
+# Launch a new fleet of 2 c5.large instances in Ohio basing on the new image
+ec2tools launch --key=my-aws-key --region=us-east-2 --price=1 --size=2 \
+                --user='ubuntu' --type='c5.large' --secgroup='sg-98338af0' \
+                --image='my-ec2tools-image' 'my-fleet-ohio'
+
+# Launch a new fleet of 7 c4.large instances in Sydney
+ec2tools launch --key=my-aws-key --region=ap-southeast-2 --price=1 \
+                --size=7 --user='ubuntu' --type='c4.large' \
+                --secgroup='sg-0e9b9bbee1dfc700a' \
+                --image='my-ec2tools-image' 'my-fleet-sydney'
+
+# Wait the fleet instances to be ready
+ec2tools wait
+
+# Delete the new image from the Amazon servers
+ec2tools drop 'my-ec2tools-image'
+```
+
 #### Send and receive files:
 ```
 # Launch instances and wait for them

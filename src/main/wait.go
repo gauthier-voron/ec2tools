@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -13,15 +14,19 @@ const (
 )
 
 type waitParameters struct {
+	OptionCommand *string
 	OptionContext *string
 	OptionCount   *string
 	OptionTimeout *string
+	OptionVerbose *bool
 	OptionWaitFor *string
 }
 
+var DEFAULT_WAIT_COMMAND string = ""
 var DEFAULT_WAIT_CONTEXT string = DEFAULT_CONTEXT
 var DEFAULT_WAIT_COUNT string = "100%"
 var DEFAULT_WAIT_TIMEOUT string = ""
+var DEFAULT_WAIT_VERBOSE bool = false
 var DEFAULT_WAIT_WAIT_FOR string = "ssh"
 
 var waitParams waitParameters
@@ -47,6 +52,9 @@ If no fleet specification is supplied, wait for all fleets.
 
 Options:
 
+  --command <cmd>             use the provided command instead of 'ssh' when
+                              waiting for ssh reachable instances
+
   --context <path>            path of the context file (default: '%s')
 
   --count <count|proportion>  the minimum count of instances per fleet
@@ -56,6 +64,9 @@ Options:
   --timeout <timespec>        maximum time to wait the instances specified in
                               format like '30' (seconds), '1m20' or even
                               '1h 40m 30s'
+
+  --verbose                   print what is happening as well as the debug
+                              output for ssh connections
 
   --wait-for <wait-type>      when to consider an instance is ready: 'ip' when
                               it has a public IPv4 address. 'ssh' when it is
@@ -145,6 +156,9 @@ func (this *ValidityMapIp) IsValid(instance *Ec2Instance) bool {
 	var found bool
 
 	_, found = this.PublicIps[instance]
+	if found && *waitParams.OptionVerbose {
+		fmt.Fprintf(os.Stderr, "[ec2tools] valid %s\n", instance.Name)
+	}
 
 	return found
 }
@@ -196,7 +210,13 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 	}
 
 	if !found || (exited && (exitcode != 0)) {
-		builder = BuildSshProcess(instance, []string{"true"})
+		if *waitParams.OptionCommand == "" {
+			builder = BuildSshProcess(instance, []string{"true"})
+		} else {
+			builder = BuildCustomSshProcess(instance,
+				strings.Split(*waitParams.OptionCommand, " "),
+				[]string{"true"})
+		}
 
 		if !timeout.IsNone() {
 			if timeout.RemainingSeconds() > 15 {
@@ -204,6 +224,13 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 			} else {
 				builder.Timeout(timeout.RemainingSeconds())
 			}
+		}
+
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr,
+				"[ec2tools] ssh connect to %s\n",
+				instance.Name)
+			builder.Verbose()
 		}
 
 		this.Processes[instance] = builder.Build()
@@ -215,16 +242,53 @@ func (this *ValidityMapSsh) UpdateValidity(instance *Ec2Instance,
 //
 func (this *ValidityMapSsh) IsValid(instance *Ec2Instance) bool {
 	var proc *Process
-	var found, exited bool
+	var found, has, exited bool
+	var line string
 	var exitcode int
 
 	proc, found = this.Processes[instance]
-
-	if found {
-		exitcode, exited = proc.ExitCode()
+	if !found {
+		return false
 	}
 
-	return (found && exited && (exitcode == 0))
+	for {
+		line, has = proc.TryReadStdout()
+		if !has {
+			break
+		}
+
+		if *waitParams.OptionCommand != "" {
+			fmt.Fprintf(os.Stdout, "[%s] %s", instance.Name,
+				line)
+		}
+	}
+
+	for {
+		line, has = proc.TryReadStderr()
+		if !has {
+			break
+		}
+
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr, "[ssh:%s] %s", instance.Name,
+				line)
+		} else if *waitParams.OptionCommand != "" {
+			fmt.Fprintf(os.Stderr, "[%s] %s", instance.Name,
+				line)
+		}
+	}
+
+	exitcode, exited = proc.ExitCode()
+
+	if exited && (exitcode == 0) {
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr, "[ec2tools] valid %s\n",
+				instance.Name)
+		}
+		return true
+	} else {
+		return false
+	}
 }
 
 // Wait for all the background ssh processes to end.
@@ -328,6 +392,9 @@ func waitFleets(ctx *Ec2Index, specs []string) bool {
 
 		time.Sleep(1000 * time.Millisecond)
 
+		if *waitParams.OptionVerbose {
+			fmt.Fprintf(os.Stderr, "[ec2tools] update context\n")
+		}
 		UpdateContext(ctx)
 	}
 
@@ -401,9 +468,11 @@ func Wait(args []string) {
 	var success bool
 	var err error
 
+	waitParams.OptionCommand = flags.String("command", DEFAULT_WAIT_COMMAND, "")
 	waitParams.OptionContext = flags.String("context", DEFAULT_WAIT_CONTEXT, "")
 	waitParams.OptionCount = flags.String("count", DEFAULT_WAIT_COUNT, "")
 	waitParams.OptionTimeout = flags.String("timeout", DEFAULT_WAIT_TIMEOUT, "")
+	waitParams.OptionVerbose = flags.Bool("verbose", DEFAULT_WAIT_VERBOSE, "")
 	waitParams.OptionWaitFor = flags.String("wait-for", DEFAULT_WAIT_WAIT_FOR, "")
 
 	flags.Parse(args[1:])

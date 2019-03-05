@@ -280,10 +280,11 @@ run_test() {
     dir=$(cat "$dirfile")
     rm "$pidfile" "$dirfile"
 
-    wait_script "$pid" 90 "$script"
+    wait_script "$pid" 600 "$script"
     ret=$?
 
-    ec2tools stop 2> /dev/null
+    ./ec2tools stop 2> /dev/null
+    ./ec2tools drop "${TEST_IMAGE}/"'*' 2> /dev/null
 
     account_ret "$script" $ret "$logfile"
 
@@ -311,7 +312,7 @@ usage() {
 # Print version information for this script on stdout.
 #
 version() {
-    printf "%s %s\n" 'runtest.sh' '1.0.0'
+    printf "%s %s\n" 'runtest.sh' '1.1.0'
     printf "%s\n" 'Gauthier Voron'
     printf "%s\n" '<gauthier.voron@sydney.edu.au>'
 }
