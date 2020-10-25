@@ -124,12 +124,16 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 		},
 	}
 
+	// If only the guys from Amazon knew how to do their fucking job...
+	//
+	until, _ = time.Parse(time.RFC3339, until.UTC().Format(time.RFC3339))
+
 	conf.IamFleetRole = &IAM_FLEET_ROLE
 	conf.SpotPrice = aws.String(fmt.Sprintf("%f", *optionPrice))
 	conf.TargetCapacity = optionSize
 	conf.TerminateInstancesWithExpiration = aws.Bool(true)
 	conf.Type = aws.String("request")
-	conf.ValidUntil = &until
+	conf.ValidUntil = aws.Time(until)
 	conf.LaunchSpecifications = []*ec2.SpotFleetLaunchSpecification{
 		&spec,
 	}
