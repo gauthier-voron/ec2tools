@@ -14,6 +14,7 @@ var IAM_FLEET_ROLE string = "arn:aws:iam::965630252549:role/aws-ec2-spot-fleet-t
 
 var DEFAULT_IMAGE string = "ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114"
 var DEFAULT_KEY string = "default"
+var DEFAULT_PLACEMENT_GROUP string = ""
 var DEFAULT_PRICE float64 = 1
 var DEFAULT_REGION string = "ap-southeast-2"
 var DEFAULT_REPLACE bool = false
@@ -25,6 +26,7 @@ var DEFAULT_USER string = "ubuntu"
 
 var optionImage *string
 var optionKey *string
+var optionPlacementGroup *string
 var optionPrice *float64
 var optionRegion *string
 var optionReplace *bool
@@ -52,6 +54,8 @@ Options:
 
   --key <key-name>            name of the ssh key to use (default: '%s')
 
+  --placement-group <group>   name of the placement group to use (default: '%s')
+
   --price <float>             maximum price per unit hour (default: %f)
 
   --region <region-name>      region where to launch instances (default: '%s')
@@ -70,13 +74,15 @@ Options:
 
 `,
 		PROGNAME, DEFAULT_CONTEXT, DEFAULT_IMAGE, DEFAULT_KEY,
-		DEFAULT_PRICE, DEFAULT_REGION, DEFAULT_SECGROUP, DEFAULT_SIZE,
-		DEFAULT_TIME, DEFAULT_TYPE, DEFAULT_USER)
+		DEFAULT_PLACEMENT_GROUP, DEFAULT_PRICE, DEFAULT_REGION,
+		DEFAULT_SECGROUP, DEFAULT_SIZE, DEFAULT_TIME, DEFAULT_TYPE,
+		DEFAULT_USER)
 }
 
 func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	var spec ec2.SpotFleetLaunchSpecification
 	var conf ec2.SpotFleetRequestConfigData
+	var placement ec2.SpotPlacement
 	var req ec2.RequestSpotFleetInput
 	var until time.Time = launchProcOptionTime.DeadlineDate()
 	var ilist *ImageList
@@ -122,6 +128,11 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 		&ec2.GroupIdentifier{
 			GroupId: aws.String(*optionSecgroup),
 		},
+	}
+
+	if *optionPlacementGroup != "" {
+		placement.GroupName = optionPlacementGroup
+		spec.Placement = &placement
 	}
 
 	// If only the guys from Amazon knew how to do their fucking job...
@@ -196,6 +207,8 @@ func Launch(args []string) {
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionImage = flags.String("image", DEFAULT_IMAGE, "")
 	optionKey = flags.String("key", DEFAULT_KEY, "")
+	optionPlacementGroup = flags.String("placement-group",
+		DEFAULT_PLACEMENT_GROUP, "")
 	optionPrice = flags.Float64("price", DEFAULT_PRICE, "")
 	optionRegion = flags.String("region", DEFAULT_REGION, "")
 	optionReplace = flags.Bool("replace", DEFAULT_REPLACE, "")
