@@ -12,6 +12,7 @@ import (
 
 var IAM_FLEET_ROLE string = "arn:aws:iam::965630252549:role/aws-ec2-spot-fleet-tagging-role"
 
+var DEFAULT_AVAILABILITY_ZONE string = ""
 var DEFAULT_IMAGE string = "ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114"
 var DEFAULT_KEY string = "default"
 var DEFAULT_PLACEMENT_GROUP string = ""
@@ -24,6 +25,7 @@ var DEFAULT_TIME string = "1h"
 var DEFAULT_TYPE string = "c5.large"
 var DEFAULT_USER string = "ubuntu"
 
+var optionAvailabilityZone *string
 var optionImage *string
 var optionKey *string
 var optionPlacementGroup *string
@@ -46,6 +48,8 @@ The fleet receives the given name and can be referred with this name in further
 commands.
 
 Options:
+
+  --availability-zone <zone>  name of the availability zone to use (default: '%s')
 
   --context <path>            path of the context file (default: '%s')
 
@@ -130,6 +134,10 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 		},
 	}
 
+	if *optionAvailabilityZone != "" {
+		placement.AvailabilityZone = optionAvailabilityZone
+		spec.Placement = &placement
+	}
 	if *optionPlacementGroup != "" {
 		placement.GroupName = optionPlacementGroup
 		spec.Placement = &placement
@@ -204,6 +212,8 @@ func Launch(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var fleetName string
 
+	optionAvailabilityZone = flags.String("availability-zone",
+		DEFAULT_AVAILABILITY_ZONE, "")
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionImage = flags.String("image", DEFAULT_IMAGE, "")
 	optionKey = flags.String("key", DEFAULT_KEY, "")
