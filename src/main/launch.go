@@ -12,18 +12,20 @@ import (
 
 var IAM_FLEET_ROLE string = "arn:aws:iam::965630252549:role/aws-ec2-spot-fleet-tagging-role"
 
+var DEFAULT_AVAILABILITY_ZONE string = ""
 var DEFAULT_IMAGE string = "ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181114"
 var DEFAULT_KEY string = "default"
 var DEFAULT_PLACEMENT_GROUP string = ""
 var DEFAULT_PRICE float64 = 1
 var DEFAULT_REGION string = "ap-southeast-2"
 var DEFAULT_REPLACE bool = false
-var DEFAULT_SECGROUP string = "sg-0e9b9bbee1dfc700a"
+var DEFAULT_SECGROUP string = "openall"
 var DEFAULT_SIZE int64 = 1
 var DEFAULT_TIME string = "1h"
 var DEFAULT_TYPE string = "c5.large"
 var DEFAULT_USER string = "ubuntu"
 
+var optionAvailabilityZone *string
 var optionImage *string
 var optionKey *string
 var optionPlacementGroup *string
@@ -47,6 +49,8 @@ commands.
 
 Options:
 
+  --availability-zone <zone>  name of the availability zone to use (default: '%s')
+
   --context <path>            path of the context file (default: '%s')
 
   --image <id | name>         name of the instance image or id if it starts by
@@ -62,7 +66,8 @@ Options:
 
   --replace                   replace the fleet with the same name if any
 
-  --secgroup <id>             id of the security group to use (default: '%s')
+  --secgroup <id>             name of the security group or id if it starts by
+                              'sg-' (default: '%s')
 
   --size <int>                number of instances in the fleet (default: %d)
 
@@ -73,10 +78,10 @@ Options:
   --user <user-name>          user to ssh connect to instances (default: '%s')
 
 `,
-		PROGNAME, DEFAULT_CONTEXT, DEFAULT_IMAGE, DEFAULT_KEY,
-		DEFAULT_PLACEMENT_GROUP, DEFAULT_PRICE, DEFAULT_REGION,
-		DEFAULT_SECGROUP, DEFAULT_SIZE, DEFAULT_TIME, DEFAULT_TYPE,
-		DEFAULT_USER)
+		PROGNAME, DEFAULT_AVAILABILITY_ZONE, DEFAULT_CONTEXT,
+		DEFAULT_IMAGE, DEFAULT_KEY, DEFAULT_PLACEMENT_GROUP,
+		DEFAULT_PRICE, DEFAULT_REGION, DEFAULT_SECGROUP, DEFAULT_SIZE,
+		DEFAULT_TIME, DEFAULT_TYPE, DEFAULT_USER)
 }
 
 func buildFleetRequest() *ec2.RequestSpotFleetInput {
@@ -86,6 +91,7 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	var req ec2.RequestSpotFleetInput
 	var until time.Time = launchProcOptionTime.DeadlineDate()
 	var ilist *ImageList
+	var sgroupid *string
 	var image *Image
 	var err error
 
@@ -122,14 +128,30 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 		}
 	}
 
+	if IsSecurityGroupId(*optionSecgroup) {
+		sgroupid = optionSecgroup
+	} else {
+		sgroupid, err = GetSecurityGroupId(*optionSecgroup,
+			*optionRegion)
+
+		if err != nil {
+			Error("cannot find security group '%s' in region '%s'",
+				*optionSecgroup, *optionRegion)
+		}
+	}
+
 	spec.InstanceType = optionType
 	spec.KeyName = optionKey
 	spec.SecurityGroups = []*ec2.GroupIdentifier{
 		&ec2.GroupIdentifier{
-			GroupId: aws.String(*optionSecgroup),
+			GroupId: aws.String(*sgroupid),
 		},
 	}
 
+	if *optionAvailabilityZone != "" {
+		placement.AvailabilityZone = optionAvailabilityZone
+		spec.Placement = &placement
+	}
 	if *optionPlacementGroup != "" {
 		placement.GroupName = optionPlacementGroup
 		spec.Placement = &placement
@@ -204,6 +226,8 @@ func Launch(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.ContinueOnError)
 	var fleetName string
 
+	optionAvailabilityZone = flags.String("availability-zone",
+		DEFAULT_AVAILABILITY_ZONE, "")
 	optionContext = flags.String("context", DEFAULT_CONTEXT, "")
 	optionImage = flags.String("image", DEFAULT_IMAGE, "")
 	optionKey = flags.String("key", DEFAULT_KEY, "")
