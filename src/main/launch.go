@@ -19,7 +19,7 @@ var DEFAULT_PLACEMENT_GROUP string = ""
 var DEFAULT_PRICE float64 = 1
 var DEFAULT_REGION string = "ap-southeast-2"
 var DEFAULT_REPLACE bool = false
-var DEFAULT_SECGROUP string = "sg-0e9b9bbee1dfc700a"
+var DEFAULT_SECGROUP string = "openall"
 var DEFAULT_SIZE int64 = 1
 var DEFAULT_TIME string = "1h"
 var DEFAULT_TYPE string = "c5.large"
@@ -66,7 +66,8 @@ Options:
 
   --replace                   replace the fleet with the same name if any
 
-  --secgroup <id>             id of the security group to use (default: '%s')
+  --secgroup <id>             name of the security group or id if it starts by
+                              'sg-' (default: '%s')
 
   --size <int>                number of instances in the fleet (default: %d)
 
