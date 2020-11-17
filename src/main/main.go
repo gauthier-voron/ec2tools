@@ -7,7 +7,7 @@ import (
 )
 
 var PROGNAME string = "ec2tools"
-var VERSION string = "2.2.0"
+var VERSION string = "2.3.0"
 var AUTHOR string = "Gauthier Voron"
 var MAILTO string = "gauthier.voron@sydney.edu.au"
 
