@@ -90,6 +90,7 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 	var req ec2.RequestSpotFleetInput
 	var until time.Time = launchProcOptionTime.DeadlineDate()
 	var ilist *ImageList
+	var sgroupid *string
 	var image *Image
 	var err error
 
@@ -126,11 +127,23 @@ func buildFleetRequest() *ec2.RequestSpotFleetInput {
 		}
 	}
 
+	if IsSecurityGroupId(*optionSecgroup) {
+		sgroupid = optionSecgroup
+	} else {
+		sgroupid, err = GetSecurityGroupId(*optionSecgroup,
+			*optionRegion)
+
+		if err != nil {
+			Error("cannot find security group '%s' in region '%s'",
+				*optionSecgroup, *optionRegion)
+		}
+	}
+
 	spec.InstanceType = optionType
 	spec.KeyName = optionKey
 	spec.SecurityGroups = []*ec2.GroupIdentifier{
 		&ec2.GroupIdentifier{
-			GroupId: aws.String(*optionSecgroup),
+			GroupId: aws.String(*sgroupid),
 		},
 	}
 
